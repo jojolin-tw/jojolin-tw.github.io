@@ -142,7 +142,9 @@
     top: auto; width: 100%; margin: 0; height: 1.35rem; z-index: 3;
     pointer-events: auto; background: rgba(10,15,28,.55); }
   /* 右滑收合: 小窗滑出右緣, 留一顆側邊按鈕; 展開不自動播放 */
-  .videoWrap.pip { transition: transform .25s; }
+  /* touch-action: pan-y —— 水平手勢交給我們, 否則 iOS Safari 一偵測到水平滑動就接管成捲動並發 pointercancel,
+     小窗停在半路 (使用者實測: 滑到一半卡住, 要再滑第二次) */
+  .videoWrap.pip { transition: transform .25s; touch-action: pan-y; }
   .videoWrap.pip.pipmin { transform: translateX(calc(100% + 1rem)); }
   .pipTab {
     position: fixed; right: 0; bottom: 3rem; z-index: 941; writing-mode: vertical-rl;
@@ -306,7 +308,7 @@
     .wrap { padding: .8rem .9rem 4rem; }
     .hero h1 { font-size: 1.32rem; }
     .hero .sub { font-size: .9rem; }
-    .hchip.m { display: none; }
+    .hero-chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: .3rem; scrollbar-width: thin; }
     .theater {
       grid-template-columns: 1fr;
       grid-template-areas: "video" "sidebar" "charts";
@@ -414,23 +416,22 @@
 
   <header class="hero">
     <h1>持續壓線偵測：從車道虛線的形狀量出騎線行駛</h1>
-    <p class="sub">長時間騎在車道線上行駛是危險駕駛行為——既不是變換車道，也不觸發車道偏離警示的瞬間條件，
-    需要專屬的偵測器。核心洞察：<b>虛線離車身遠時在畫面裡是斜的（框寬 &gt; 高），車騎到線上時
-    虛線近乎垂直（框高 &gt; 寬）</b>——「畫面中央出現細長直立的虛線框」本身就是壓線的直接證據。
-    演算法把每幀合格框的<b>最小長寬比（min-AR）</b>連成曲線，量出壓線持續多久。
+    <p class="sub">長時間騎在車道線上既非變換車道，也不觸發車道偏離警示的瞬間條件，需要專屬偵測器。核心洞察：
+    <b>虛線離車身遠時在畫面裡是斜的（框寬 &gt; 高），車騎到線上時近乎直立（框高 &gt; 寬）</b>——
+    「畫面中央出現細長直立的虛線框」本身就是壓線證據。演算法把每幀合格框的<b>最小長寬比（min Aspect Ratio，下稱 min-AR）</b>連成曲線，
+    經中值濾波去尖刺與零相位雙向 EMA 平滑，以 θ 門檻交點內插量出壓線秒數，再由彎道航向、壓線方向與 GPS 可信度三重守門攔截誤判。
+    289 段測資逐段人工標記：觸發 7/7 全真、彎道誤判 2/2 攔截、GPS 守門 296 支全量驗證。
     下方是<b>可互動的演算法重現</b>：影片、偵測框、逐幀數據即時同步。</p>
     <div class="hero-chips">
-      <span class="hchip m" data-tip="不沿用既有的對角線外推＋消失點分側判定：壓線時框細長、寬高比誤差會被外推槓桿放大成數十 px，車頭擺動時消失點也不可靠。min-AR 不外推、不分側，把兩個病根整個繞開——消失點只剩「決定 ROI 上緣」一個輕用途">min-AR 曲線法（原創）</span>
-      <span class="hchip m" data-tip="事件窗事後重算、資料完整，所以平滑能用零相位的雙向 EMA（前向＋後向取平均，不引入相位延遲）；α=1−e^(−Δt/τ) 時間制，幀距 50~600ms 都正確——這是離線重算相對即時判定的結構性優勢">零相位雙向 EMA</span>
-      <span class="hchip m" data-tip="線性濾波只能衰減離群值、不能剔除：實測單幀假值 0.28→0.83→0.28 經 EMA 平滑後仍 0.72，恰好越過門檻把一段壓線劈成兩半——先用 3 點中值把它整顆剔掉">median-3 去尖刺</span>
-      <span class="hchip m" data-tip="壓線段起訖＝平滑曲線與 θ 門檻的線性交點，時長不受 0.25 秒幀距量化影響，達到次幀解析度">θ 交點內插</span>
-      <span class="hchip m" data-tip="彎道上的虛線同樣呈細長直立，是最大誤判源。守門用兩個獨立證據：GPS 航向量出的左右轉區間（|ω|≥2°/s 連續同號、轉角≥8°、半徑≤300m 才算急彎）×壓線方向判定（有跨越＝真變換，豁免）；曾試過面積門檻、前視距離窗等六種對策都被實測擊破，最終以這組雙證據交叉驗證定案">彎道誤判守門</span>
-      <span class="hchip m" data-tip="模型單幀漏檢會把一段壓線裂成碎段。合併規則：縫 ≤5 秒且縫內全是缺框幀才合併、時長＝證據加總（空窗不計）——缺框永遠不是回正證據：真回正時線還在畫面裡，只是 AR 升高">盲縫合併</span>
-      <span class="hchip m" data-tip="兩個指紋任一成立即判定證據不可信：①位置凍結×速度宣稱（GPS 位置不動、速度卻宣稱移動 ≥60m——健康 GPS 不可能）②accuracy 連續 ≥30m（隧道實測爬到 142~501m，健康 95 分位僅 9.6m）。寧漏勿誤，不可信就整鏈丟棄">GPS 自相矛盾指紋</span>
-      <span class="hchip r" data-tip="8 筆真實事件＋6 段人工挑選片段＋275 段連續路測（含停車場、直角彎、雨天）；觸發與丟棄逐段人工看影片判定">289 段測資</span>
-      <span class="hchip r" data-tip="289 段中觸發的 7 段全部經人工確認為真壓線（含 12.6s／11.9s 長壓線），無一誤判">觸發 7/7 全真</span>
-      <span class="hchip r" data-tip="兩段彎道細長框誤判（6.86s／8.52s 假高原，半徑約 260m／130m）全數被彎道守門正確丟棄">彎道誤判 2/2 攔截</span>
-      <span class="hchip r" data-tip="GPS 守門對 296 支影片全量驗證：唯一與壓線鏈重疊的不可信視窗就是本頁的隧道案例；accuracy 指紋另抓到 6 筆位置凍結漏掉的異常">GPS 全量 296 支驗證</span>
+      <span class="hchip m" data-tip="不沿用對角線外推＋消失點分側判定（壓線時框細長、外推槓桿把誤差放大成數十 px；車頭擺動時消失點不可靠）。min-AR 不外推、不分側，直接用框形狀當證據，把兩個病根整個繞開">min-AR 曲線法（原創・AR＝框長寬比）</span>
+      <span class="hchip m" data-tip="事件窗事後重算、資料完整，平滑用零相位的雙向 EMA（前向＋後向取平均，不引入相位延遲）；α=1−e^(−Δt/τ) 時間制，幀距 50~600 ms 都正確">零相位雙向 EMA</span>
+      <span class="hchip m" data-tip="線性濾波只能衰減離群值、不能剔除：實測單幀假值 0.28→0.83→0.28 經 EMA 後仍 0.72、恰好越過門檻把一段壓線劈成兩半——先用 3 點中值整顆剔掉">中值濾波去尖刺</span>
+      <span class="hchip m" data-tip="壓線段起訖＝平滑曲線與 θ 門檻的線性交點，時長不受 0.25 秒幀距量化影響，達到次幀解析度">門檻交點次幀內插</span>
+      <span class="hchip m" data-tip="彎道上的虛線同樣細長直立，是最大誤判源。以 GPS 航向量出左右轉區間（|ω|≥2°/s 連續同號、轉角≥8°、半徑≤300 m 才算急彎），與壓線方向判定（有跨越＝真變換，豁免）雙證據守門；曾試過六種對策都被實測擊破">GPS 航向彎道判別</span>
+      <span class="hchip m" data-tip="兩個自相矛盾指紋任一成立即判 GPS 不可信：①位置凍結卻宣稱移動 ≥60 m ②accuracy 連續 ≥30 m（隧道實測爬到 142~501 m，健康 95 分位僅 9.6 m）。寧漏勿誤，不可信就整鏈丟棄">GPS 資料可信度檢核</span>
+      <span class="hchip r" data-tip="289 段中觸發的 7 段全部經人工確認為真壓線（含 12.6 s／11.9 s 長壓線）">觸發 7/7 全真</span>
+      <span class="hchip r" data-tip="兩段彎道細長框誤判（6.86 s／8.52 s 假高原，半徑約 260 m／130 m）皆被航向守門攔下">彎道誤判 2/2 攔截</span>
+      <span class="hchip r" data-tip="GPS 守門對 296 支影片全量驗證：唯一與壓線鏈重疊的不可信視窗即隧道案例，正確丟棄">GPS 296 支全量驗證</span>
     </div>
   </header>
 
@@ -1240,13 +1241,15 @@ selectCase(0, false);
     wrap.style.transform = "";
   }
   // 唯一手勢: 往右拖 (dx>8px 才算), 超過 40% 寬放開 = 收合, 否則彈回
-  let pipDrag = false, pipMoved = false, pipX0 = 0;
+  let pipDrag = false, pipMoved = false, pipX0 = 0, pipXLast = 0;
   wrap.addEventListener("pointerdown", e => {
     if (!wrap.classList.contains("pip") || wrap.classList.contains("pipmin") || e.target === scrub || e.target === pipCtl) return;
-    pipDrag = true; pipMoved = false; pipX0 = e.clientX;
+    pipDrag = true; pipMoved = false; pipX0 = pipXLast = e.clientX;
+    try { wrap.setPointerCapture(e.pointerId); } catch (_) {}   // 手指滑出小窗仍收得到 move/up
   });
   addEventListener("pointermove", e => {
     if (!pipDrag) return;
+    pipXLast = e.clientX;
     const dx = e.clientX - pipX0;
     if (!pipMoved && dx < 8) return;
     pipMoved = true;
@@ -1255,15 +1258,19 @@ selectCase(0, false);
     wrap.style.transform = t;
     pipCtl.style.transform = t;   // 左上尺寸鈕跟著滑 (右滑提示已貼右緣, 不動)
   });
-  addEventListener("pointerup", e => {
+  // pointercancel 也走同一條收尾 (瀏覽器接管手勢時只發 cancel 不發 up), 用最後一次 move 的座標判定
+  const pipEnd = e => {
     if (!pipDrag) return; pipDrag = false;
     if (!pipMoved) return;
     wrap.style.transition = ""; pipCtl.style.transition = "transform .25s";
     pipCtl.style.transform = "";
+    const x = (e.type === "pointercancel" || e.clientX == null) ? pipXLast : e.clientX;
     // 門檻只需防「點暫停時手滑」——40px 已遠大於點擊抖動 (拖曳判定 8px)
-    if (e.clientX - pipX0 > 40) collapsePip();
+    if (x - pipX0 > 40) collapsePip();
     else wrap.style.transform = "";
-  });
+  };
+  addEventListener("pointerup", pipEnd);
+  addEventListener("pointercancel", pipEnd);
   wrap.addEventListener("click", e => {   // 拖曳結束的 click 不觸發影片播放
     if (pipMoved) { e.stopPropagation(); e.preventDefault(); pipMoved = false; }
   }, true);

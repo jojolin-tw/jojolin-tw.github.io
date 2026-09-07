@@ -144,7 +144,9 @@
     top: auto; width: 100%; margin: 0; height: 1.35rem; z-index: 3;
     pointer-events: auto; background: rgba(10,15,28,.55); }
   /* 右滑收合: 小窗滑出右緣, 留一顆側邊按鈕; 展開不自動播放 */
-  .videoWrap.pip { transition: transform .25s; }
+  /* touch-action: pan-y —— 水平手勢交給我們, 否則 iOS Safari 一偵測到水平滑動就接管成捲動並發 pointercancel,
+     小窗停在半路 (使用者實測: 滑到一半卡住, 要再滑第二次) */
+  .videoWrap.pip { transition: transform .25s; touch-action: pan-y; }
   .videoWrap.pip.pipmin { transform: translateX(calc(100% + 1rem)); }
   .pipTab {
     position: fixed; right: 0; bottom: 3rem; z-index: 941; writing-mode: vertical-rl;
@@ -308,7 +310,7 @@
     .wrap { padding: .8rem .9rem 4rem; }
     .hero h1 { font-size: 1.32rem; }
     .hero .sub { font-size: .9rem; }
-    .hchip.m { display: none; }
+    .hero-chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: .3rem; scrollbar-width: thin; }
     .theater {
       grid-template-columns: 1fr;
       grid-template-areas: "video" "sidebar" "charts";
@@ -398,22 +400,22 @@
 
   <header class="hero">
     <h1>接近碰撞偵測：急煞觸發下的即時碰撞風險判定</h1>
-    <p class="sub">急煞不一定有危險——真正要抓的是<b>差點追撞前車</b>的驚險瞬間。
-    車機偵測到急煞後，自動回看前方影像：魚眼校正 → 單目測距 →
-    <b>卡爾曼濾波</b>（Kalman Filter，下稱 KF）解出平滑距離與接近率 →
-    四條件判定是否構成<b>接近碰撞（Near Collision）</b>。
-    整條判定鏈在車機上即時完成、不需回傳雲端。
+    <p class="sub">急煞本身不等於危險，真正要抓的是<b>差點追撞前車</b>的瞬間。車機在急煞觸發後回看前方影像：
+    魚眼去畸變與透視校正還原幾何，偵測框寬換算單目距離，手刻一維<b>卡爾曼濾波</b>（Kalman Filter，下稱 KF）
+    把鋸齒量測解成平滑距離與接近率，再以距離 ≤8 m、正在接近、目標在本車道 ROI、連續紀錄 ≥3 幀四條件判定
+    <b>接近碰撞（Near Collision）</b>。整條鏈在車機端 4 FPS 即時完成、不回傳雲端；同一顆濾波器也驅動前方碰撞警示與跟車偵測。
+    明確人工預期 9/9 全對、校正鏈單元測試 8/8、接近率門檻經四檔靈敏度掃描定案。
     下方是<b>可互動的演算法重現</b>：影片、偵測框、逐幀數據即時同步。</p>
     <div class="hero-chips">
-      <span class="hchip m" data-tip="狀態向量 [距離, 相對速度]、等速度運動模型、Piecewise White Noise 製程雜訊；只量測距離，相對速度由 cross-covariance 反推">手刻 1D 卡爾曼濾波</span>
-      <span class="hchip m" data-tip="偵測框寬度換算公尺距離；量測雜訊 R 隨距離自適應（40m 內基準、40~60m 線性放大、60m 外 3 倍）——針對視覺測距遠距失準的物理特性設計">單目視覺測距</span>
-      <span class="hchip m" data-tip="魚眼鏡頭的桶狀畸變會把直線拍彎、相機俯角會壓扁遠景：先 undistort 還原直線、再 untilt 透視變換回正視角——幾何還原後，框寬才能換算成真實距離">魚眼去畸變＋透視校正</span>
-      <span class="hchip m" data-tip="ROI（Region of Interest）＝演算法只採計的本車道判定區：鉛筆形六邊形隨相機消失點動態平移縮放，用「判定點（框底中心）是否在多邊形內」界定本車道——鄰車道車輛因此不誤觸">消失點自適應 ROI</span>
-      <span class="hchip m" data-tip="貪婪最近鄰匹配跨幀綁定追蹤 ID，讓每台車擁有自己的卡爾曼濾波器與歷史紀錄">最近鄰追蹤</span>
-      <span class="hchip m" data-tip="1.5 秒內同一台車被看到 ≥3 幀才具判定資格——容忍單幀漏檢、擋掉單幀誤檢的防閃爍機制">防閃爍紀錄門檻</span>
+      <span class="hchip m" data-tip="狀態向量 [距離, 相對速度]、等速度運動模型、Piecewise White Noise 製程雜訊；只量測距離，相對速度由 cross-covariance 反推。同一份 KalmanFilter.kt 驅動 FCW／跟車／接近碰撞三個功能">手刻 1D 卡爾曼濾波</span>
+      <span class="hchip m" data-tip="偵測框寬度換算公尺距離；量測雜訊 R 隨距離自適應（40 m 內基準、40~60 m 線性放大、60 m 外 3 倍）——針對視覺測距遠距失準的物理特性設計">單目視覺測距</span>
+      <span class="hchip m" data-tip="魚眼桶狀畸變把直線拍彎、相機俯角壓扁遠景：先 undistort 還原直線、再 untilt 透視變換回正視角——幾何還原後框寬才能換算成真實距離">魚眼去畸變＋透視校正</span>
+      <span class="hchip m" data-tip="ROI（Region of Interest）＝只採計的本車道判定區：鉛筆形六邊形隨相機消失點動態平移縮放，以「框底中心是否在多邊形內」界定本車道——鄰車道車輛不誤觸">消失點估計＋動態 ROI</span>
+      <span class="hchip m" data-tip="跨幀以最近鄰匹配綁定追蹤 ID，讓每台車擁有自己的卡爾曼濾波器與歷史紀錄；同一台車 1.5 秒內看到 ≥3 幀才具判定資格，容忍單幀漏檢、擋掉單幀誤檢">多目標追蹤</span>
+      <span class="hchip m" data-tip="偵測、測距、濾波、判定全在車機端 4 FPS 完成，不回傳雲端；本頁以車機模型的逐幀輸出重現">邊緣端即時判定（4 FPS）</span>
       <span class="hchip r" data-tip="12 筆真實急煞事件人工標記預期：4 筆「一定要觸發」＋4 筆「不應觸發」全數判對；另 4 筆「可觸發可不觸發」不計分">明確預期 9/9 全對</span>
       <span class="hchip r" data-tip="魚眼 undistort＋untilt＋透視變換鏈路，以 8 組實際數值單元測試逐一驗證">校正單元測試 8/8</span>
-      <span class="hchip r" data-tip="closingRateThreshold 掃 1.0/0.5/0.0/−0.5：1.0 會漏掉「急煞成功後」的真實接近碰撞（實測有接近率僅 0.08 的真實案例），最終定 0.0">參數靈敏度掃描</span>
+      <span class="hchip r" data-tip="closingRateThreshold 掃 1.0／0.5／0.0／−0.5：1.0 會漏掉「急煞成功後」的真實接近碰撞（實測有接近率僅 0.08 的真實案例），最終定 0.0">參數靈敏度掃描</span>
     </div>
   </header>
 
@@ -1157,13 +1159,15 @@ selectCase(0, false);
     wrap.style.transform = "";
   }
   // 唯一手勢: 往右拖 (dx>8px 才算), 超過 40% 寬放開 = 收合, 否則彈回
-  let pipDrag = false, pipMoved = false, pipX0 = 0;
+  let pipDrag = false, pipMoved = false, pipX0 = 0, pipXLast = 0;
   wrap.addEventListener("pointerdown", e => {
     if (!wrap.classList.contains("pip") || wrap.classList.contains("pipmin") || e.target === scrub || e.target === pipCtl) return;
-    pipDrag = true; pipMoved = false; pipX0 = e.clientX;
+    pipDrag = true; pipMoved = false; pipX0 = pipXLast = e.clientX;
+    try { wrap.setPointerCapture(e.pointerId); } catch (_) {}   // 手指滑出小窗仍收得到 move/up
   });
   addEventListener("pointermove", e => {
     if (!pipDrag) return;
+    pipXLast = e.clientX;
     const dx = e.clientX - pipX0;
     if (!pipMoved && dx < 8) return;
     pipMoved = true;
@@ -1172,15 +1176,19 @@ selectCase(0, false);
     wrap.style.transform = t;
     pipCtl.style.transform = t;   // 左上尺寸鈕跟著滑 (右滑提示已貼右緣, 不動)
   });
-  addEventListener("pointerup", e => {
+  // pointercancel 也走同一條收尾 (瀏覽器接管手勢時只發 cancel 不發 up), 用最後一次 move 的座標判定
+  const pipEnd = e => {
     if (!pipDrag) return; pipDrag = false;
     if (!pipMoved) return;
     wrap.style.transition = ""; pipCtl.style.transition = "transform .25s";
     pipCtl.style.transform = "";
+    const x = (e.type === "pointercancel" || e.clientX == null) ? pipXLast : e.clientX;
     // 門檻只需防「點暫停時手滑」——40px 已遠大於點擊抖動 (拖曳判定 8px)
-    if (e.clientX - pipX0 > 40) collapsePip();
+    if (x - pipX0 > 40) collapsePip();
     else wrap.style.transform = "";
-  });
+  };
+  addEventListener("pointerup", pipEnd);
+  addEventListener("pointercancel", pipEnd);
   wrap.addEventListener("click", e => {   // 拖曳結束的 click 不觸發影片播放
     if (pipMoved) { e.stopPropagation(); e.preventDefault(); pipMoved = false; }
   }, true);

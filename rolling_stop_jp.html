@@ -149,7 +149,9 @@
     top: auto; width: 100%; margin: 0; height: 1.35rem; z-index: 3;
     pointer-events: auto; background: rgba(10,15,28,.55); }
   /* 右滑收合: 小窗滑出右緣, 留一顆側邊按鈕; 展開不自動播放 */
-  .videoWrap.pip { transition: transform .25s; }
+  /* touch-action: pan-y —— 水平手勢交給我們, 否則 iOS Safari 一偵測到水平滑動就接管成捲動並發 pointercancel,
+     小窗停在半路 (使用者實測: 滑到一半卡住, 要再滑第二次) */
+  .videoWrap.pip { transition: transform .25s; touch-action: pan-y; }
   .videoWrap.pip.pipmin { transform: translateX(calc(100% + 1rem)); }
   .pipTab {
     position: fixed; right: 0; bottom: 3rem; z-index: 941; writing-mode: vertical-rl;
@@ -315,7 +317,7 @@
     .wrap { padding: .8rem .9rem 4rem; }
     .hero h1 { font-size: 1.32rem; }
     .hero .sub { font-size: .9rem; }
-    .hchip.m { display: none; }
+    .hero-chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: .3rem; scrollbar-width: thin; }
     .theater {
       grid-template-columns: 1fr;
       grid-template-areas: "video" "sidebar" "charts";
@@ -446,21 +448,23 @@
 
   <header class="hero">
     <h1>停止標誌未停讓偵測：從影像判讀車輛行進或靜止</h1>
-    <p class="sub">日本法規要求車輛在「止まれ」停止標誌前完全靜止，滑行未停（rolling stop）即屬違規。
-    系統以 <b>Phase Correlation（相位相關）</b>逐幀判讀畫面中的車輛是行進還是靜止，
-    直接量出在標誌前真正靜止了幾秒——全程不依賴 GPS。
+    <p class="sub">日本法規要求在「止まれ」標誌前完全靜止，滑行未停（rolling stop）即違規；GPS 在低速時誤差與車速同量級，量不出真正的靜止。
+    系統改從影像下手：<b>Phase Correlation（相位相關）</b>在 4×4 網格逐幀量出畫面位移，聚合成前進量與轉彎量，
+    經 Sigma-clip 與 SNR 信心閘過濾後驅動三態運動狀態機，只在停止標誌觀察窗內累計靜止秒數。
+    架構為兩階段：車機端 4 FPS 粗篩上報，雲端 24 FPS 全幀重審，判決門檻為線上可調參數。
+    110 筆真實事件人工標記：Precision 95.2%、Recall 87.0%，車機誤報攔截 98%。
     下方是<b>可互動的演算法重現</b>：影片、偵測框、逐幀數據即時同步。</p>
     <div class="hero-chips">
-      <span class="hchip m" data-tip="將相鄰影格轉到頻率域解相位差，直接量出畫面平移量——亞像素精度，對光影變化魯棒">Phase Correlation 位移量測</span>
-      <span class="hchip m" data-tip="雲端全幀分析、不抽幀；時間解析度是車機端（4 FPS）的 6 倍，每幀 0.042 秒">24 FPS 逐幀分析</span>
-      <span class="hchip m" data-tip="畫面切 16 區各自量位移，聚合成「前進量 radial」與「轉彎量 dx」兩路訊號">4×4 網格位移場</span>
-      <span class="hchip m" data-tip="逐幀 2σ 離群排除＋信噪比（SNR）信心閘：低信心的幀不更新判斷，抗雨刷、反光等干擾">Sigma-clip ＋ SNR 信心過濾</span>
-      <span class="hchip m" data-tip="MOVING（移動）／SLOW（慢速）／STOPPED（靜止）三態；進出 STOPPED 需連續 4 幀確認，對行人走動等畫面干擾免疫；轉彎時禁判 STOPPED">三態運動狀態機</span>
-      <span class="hchip m" data-tip="地面標線＋桿上立牌雙路偵測構成「應停車的觀察窗」，靜止秒數只在窗內累計——等紅燈、塞車不會被誤算成停讓">停止標誌觀察窗</span>
-      <span class="hchip m" data-tip="事件觸發自動重審；判決門檻做成環境變數，線上調整數秒生效、不需重新部署">AWS Lambda 無伺服器部署</span>
-      <span class="hchip r" data-tip="演算法判「違規」時，實際真的違規的比例＝TP/(TP＋FP)＝20/21（第二輪上線實測 78 筆）">Precision 95.2%</span>
+      <span class="hchip m" data-tip="相鄰影格轉到頻率域解相位差，直接量出畫面平移量——亞像素精度，對光影變化魯棒">Phase Correlation 頻域運動估計</span>
+      <span class="hchip m" data-tip="畫面切 16 區各自量位移，聚合成「前進量 radial」與「轉彎量 dx」兩路訊號">區塊位移場（4×4）</span>
+      <span class="hchip m" data-tip="逐幀 2σ 離群排除：雨刷、反光、行人穿越等局部干擾區塊不參與聚合">Sigma-clip 離群排除</span>
+      <span class="hchip m" data-tip="相關峰的信噪比低於門檻＝該幀資訊不足，不更新狀態機——寧可不判，不可誤判">SNR 信心閘</span>
+      <span class="hchip m" data-tip="MOVING／SLOW／STOPPED 三態；進出 STOPPED 需連續 4 幀確認，對行人走動等干擾免疫；轉彎時禁判 STOPPED">有限狀態機（三態）</span>
+      <span class="hchip m" data-tip="地面標線＋桿上立牌雙路偵測構成「應停車的觀察窗」，靜止秒數只在窗內累計——等紅燈、塞車不會被誤算成停讓">時序事件窗判定</span>
+      <span class="hchip m" data-tip="車機端 4 FPS GPS＋影像粗篩上報，雲端 AWS Lambda 以 24 FPS 全幀重審；判決門檻做成環境變數，線上調整數秒生效">車機／雲端兩階段架構</span>
+      <span class="hchip r" data-tip="演算法判「違規」時實際真的違規的比例＝TP/(TP＋FP)＝20/21（第二輪上線實測 78 筆）">Precision 95.2%</span>
       <span class="hchip r" data-tip="所有真實違規中被演算法抓到的比例＝TP/(TP＋FN)＝20/23（第二輪上線實測 78 筆）">Recall 87.0%</span>
-      <span class="hchip r" data-tip="兩輪人工逐筆標記的真實事件實測：開發期 32 筆＋上線後 78 筆，詳見頁尾驗證章節">110 筆真實事件驗證</span>
+      <span class="hchip r" data-tip="兩輪人工逐筆標記：開發期 32 筆＋上線後 78 筆，詳見頁尾驗證章節">110 筆真實事件</span>
     </div>
   </header>
 
@@ -1130,13 +1134,15 @@ selectCase(0, false);
     wrap.style.transform = "";
   }
   // 唯一手勢: 往右拖 (dx>8px 才算), 超過 40% 寬放開 = 收合, 否則彈回
-  let pipDrag = false, pipMoved = false, pipX0 = 0;
+  let pipDrag = false, pipMoved = false, pipX0 = 0, pipXLast = 0;
   wrap.addEventListener("pointerdown", e => {
     if (!wrap.classList.contains("pip") || wrap.classList.contains("pipmin") || e.target === scrub || e.target === pipCtl) return;
-    pipDrag = true; pipMoved = false; pipX0 = e.clientX;
+    pipDrag = true; pipMoved = false; pipX0 = pipXLast = e.clientX;
+    try { wrap.setPointerCapture(e.pointerId); } catch (_) {}   // 手指滑出小窗仍收得到 move/up
   });
   addEventListener("pointermove", e => {
     if (!pipDrag) return;
+    pipXLast = e.clientX;
     const dx = e.clientX - pipX0;
     if (!pipMoved && dx < 8) return;
     pipMoved = true;
@@ -1145,15 +1151,19 @@ selectCase(0, false);
     wrap.style.transform = t;
     pipCtl.style.transform = t;   // 左上尺寸鈕跟著滑 (右滑提示已貼右緣, 不動)
   });
-  addEventListener("pointerup", e => {
+  // pointercancel 也走同一條收尾 (瀏覽器接管手勢時只發 cancel 不發 up), 用最後一次 move 的座標判定
+  const pipEnd = e => {
     if (!pipDrag) return; pipDrag = false;
     if (!pipMoved) return;
     wrap.style.transition = ""; pipCtl.style.transition = "transform .25s";
     pipCtl.style.transform = "";
+    const x = (e.type === "pointercancel" || e.clientX == null) ? pipXLast : e.clientX;
     // 門檻只需防「點暫停時手滑」——40px 已遠大於點擊抖動 (拖曳判定 8px)
-    if (e.clientX - pipX0 > 40) collapsePip();
+    if (x - pipX0 > 40) collapsePip();
     else wrap.style.transform = "";
-  });
+  };
+  addEventListener("pointerup", pipEnd);
+  addEventListener("pointercancel", pipEnd);
   wrap.addEventListener("click", e => {   // 拖曳結束的 click 不觸發影片播放
     if (pipMoved) { e.stopPropagation(); e.preventDefault(); pipMoved = false; }
   }, true);

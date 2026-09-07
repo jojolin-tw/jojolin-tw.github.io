@@ -140,7 +140,9 @@
     top: auto; width: 100%; margin: 0; height: 1.35rem; z-index: 3;
     pointer-events: auto; background: rgba(10,15,28,.55); }
   /* 右滑收合: 小窗滑出右緣, 留一顆側邊按鈕; 展開不自動播放 */
-  .videoWrap.pip { transition: transform .25s; }
+  /* touch-action: pan-y —— 水平手勢交給我們, 否則 iOS Safari 一偵測到水平滑動就接管成捲動並發 pointercancel,
+     小窗停在半路 (使用者實測: 滑到一半卡住, 要再滑第二次) */
+  .videoWrap.pip { transition: transform .25s; touch-action: pan-y; }
   .videoWrap.pip.pipmin { transform: translateX(calc(100% + 1rem)); }
   .pipTab {
     position: fixed; right: 0; bottom: 3rem; z-index: 941; writing-mode: vertical-rl;
@@ -325,7 +327,7 @@
     .wrap { padding: .8rem .9rem 4rem; }
     .hero h1 { font-size: 1.32rem; }
     .hero .sub { font-size: .9rem; }
-    .hchip.m { display: none; }
+    .hero-chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: .3rem; scrollbar-width: thin; }
     .theater {
       grid-template-columns: 1fr;
       grid-template-areas: "video" "sidebar" "charts";
@@ -413,20 +415,21 @@
 
   <header class="hero">
     <h1>急駕駛事件偵測：從慣性訊號還原危險駕駛的瞬間</h1>
-    <p class="sub">車隊要管理的是<b>急煞車、急加速、急轉彎</b>等危險駕駛行為。
-    車輛的 <b>IMU（慣性感測器）</b>每秒回報約 5 次加速度與航向，這套演算法從
-    15 秒的訊號窗萃取三組特徵——<b>嚴重度</b>（峰值減去 EMA 安靜基線）、<b>速度淨幅</b>（最佳單調段）、
-    <b>淨轉向</b>（平滑後航向差）——再交給參數化決策樹分類成急煞車／急加速／急轉彎。
+    <p class="sub">消費級 IMU 雜訊大，路面顛簸與危險駕駛在絕對加速度上難以區分。本演算法從車機 15 秒感測窗萃取三組特徵：
+    <b>嚴重度</b>（峰值減去 EMA 基線）、<b>速度淨幅</b>（最佳單調段頭尾差）、<b>淨轉向</b>（航向角 unwrap 後的頭尾差），
+    交由參數化決策樹分成急煞車／急加速／急轉彎，每筆判定都能攤成「實測值 vs 門檻」逐關檢視。
+    150 筆盲測人工標記：Precision 98.5%、Recall 94.3%；537 筆急轉彎中 181 筆路面抖動 181/181 全數攔截。
     下方是<b>可互動的演算法重現</b>：影片、G 力計、航向儀、逐幀訊號即時同步。</p>
     <div class="hero-chips">
-      <span class="hchip m" data-tip="因果單向 EMA（α=0.05、前 5 點平均開局抗離群起點），取觸發前 2 秒的值當「事件前安靜基準」——嚴重度量的是相對高度，顛簸路面的常態震動不會虛報">EMA 安靜基線</span>
-      <span class="hchip m" data-tip="峰值＝窗內「連續三點平均」取最大那組——要求震動持續半秒以上，單幀雜訊尖刺再高也不會被當成峰值">連續三點平均峰值</span>
-      <span class="hchip m" data-tip="速度淨幅＝窗內「最佳單調段」頭尾差：每秒去重、容忍 1 m/s 平台微抖、GPS 失效段切斷重算——比「最大速差」更貼近人對急煞的直覺">最佳單調段速度分析</span>
-      <span class="hchip m" data-tip="航向角在 ±180° 會環繞跳變，先 unwrap 解開再中心移動平均平滑；淨轉向看頭尾差、|net|/(pos+neg) 比例把左右抖動濾掉">yaw unwrap＋平滑</span>
-      <span class="hchip m" data-tip="GPS 失效（值=-1）與真停車（0.0）嚴格分開：失效段不參與判斷、單調段跨失效區直接重置——低速時 GPS 誤差與車速同量級，這是必要防線">GPS 失效防護</span>
-      <span class="hchip m" data-tip="門檻全部做成 per-client 參數（嚴重度三門檻/速度淨幅/轉向區間/角速度區間/初末速上限），不同車隊特性可獨立調校而不動演算法">參數化決策樹</span>
-      <span class="hchip r" data-tip="嚴重度 ≥3.5（客戶上線參數）母體分層抽樣＋最嚴重補充，150 筆逐筆人工標記（盲測——標記時不顯示演算法判定）：Precision 98.5%、Recall 94.3%（主力車隊）——詳見頁尾驗證章節">人工標記 P 98.5%・R 94.3%</span>
-      <span class="hchip r" data-tip="以物理指紋規則逐筆標籤的子集：537 筆急轉彎中 181 筆「左右擺動大、淨轉向≈0」的路面抖動，被淨轉向法 181/181 全數過濾；272 筆乾淨轉彎保留 271 筆">抖動誤判過濾 181/181</span>
+      <span class="hchip m" data-tip="三軸加速度與陀螺儀 yaw，約 5 Hz；判定只用水平合力大小——IMU 安裝方向逐車不同，方向不可靠、量值可靠">IMU 慣性訊號處理</span>
+      <span class="hchip m" data-tip="因果單向 EMA（α=0.05）取觸發前 2 秒的值當事件前基線；嚴重度＝峰值−基線，量的是相對高度，顛簸路面的常態震動不會虛報">EMA 濾波基線估計</span>
+      <span class="hchip m" data-tip="速度淨幅＝窗內「最佳單調段」頭尾差：每秒去重、容忍 1 m/s 平台微抖、GPS 失效段切斷重算——比「最大速差」更貼近人對急煞的直覺">最佳單調段淨幅</span>
+      <span class="hchip m" data-tip="航向在 ±180° 環繞跳變，先 unwrap 解開再中心移動平均平滑；淨轉向取頭尾差，|net|/(pos+neg) 比例濾掉左右抖動">航向角 Unwrap</span>
+      <span class="hchip m" data-tip="GPS 失效（−1）與真停車（0.0）嚴格分開：失效段不參與判斷、單調段跨失效區直接重置——低速時 GPS 誤差與車速同量級">GPS 品質閘控</span>
+      <span class="hchip m" data-tip="門檻全部做成 per-client 參數（嚴重度三門檻／速度淨幅／轉向區間／角速度區間／初末速上限），車隊可獨立調校而不動演算法">參數化決策樹</span>
+      <span class="hchip m" data-tip="每一筆判定都能攤成「實測值 vs 門檻」的關卡清單（見下方決策樹面板），可逐案覆核，不是黑箱分數">可解釋規則判定</span>
+      <span class="hchip r" data-tip="嚴重度 ≥3.5 母體分層抽樣＋最嚴重補充，150 筆逐筆人工標記（標記時不顯示演算法判定）——詳見頁尾驗證章節">盲測 P 98.5%・R 94.3%</span>
+      <span class="hchip r" data-tip="以物理指紋規則逐筆標籤的子集：537 筆急轉彎中 181 筆「左右擺動大、淨轉向≈0」的路面抖動，被淨轉向法全數過濾；272 筆乾淨轉彎保留 271 筆">抖動誤判 181/181 攔截</span>
     </div>
   </header>
 
@@ -1295,13 +1298,15 @@ selectCase(0, false);
     wrap.style.transform = "";
   }
   // 唯一手勢: 往右拖 (dx>8px 才算), 超過 40% 寬放開 = 收合, 否則彈回
-  let pipDrag = false, pipMoved = false, pipX0 = 0;
+  let pipDrag = false, pipMoved = false, pipX0 = 0, pipXLast = 0;
   wrap.addEventListener("pointerdown", e => {
     if (!wrap.classList.contains("pip") || wrap.classList.contains("pipmin") || e.target === scrub || e.target === pipCtl) return;
-    pipDrag = true; pipMoved = false; pipX0 = e.clientX;
+    pipDrag = true; pipMoved = false; pipX0 = pipXLast = e.clientX;
+    try { wrap.setPointerCapture(e.pointerId); } catch (_) {}   // 手指滑出小窗仍收得到 move/up
   });
   addEventListener("pointermove", e => {
     if (!pipDrag) return;
+    pipXLast = e.clientX;
     const dx = e.clientX - pipX0;
     if (!pipMoved && dx < 8) return;
     pipMoved = true;
@@ -1310,15 +1315,19 @@ selectCase(0, false);
     wrap.style.transform = t;
     pipCtl.style.transform = t;   // 左上尺寸鈕跟著滑 (右滑提示已貼右緣, 不動)
   });
-  addEventListener("pointerup", e => {
+  // pointercancel 也走同一條收尾 (瀏覽器接管手勢時只發 cancel 不發 up), 用最後一次 move 的座標判定
+  const pipEnd = e => {
     if (!pipDrag) return; pipDrag = false;
     if (!pipMoved) return;
     wrap.style.transition = ""; pipCtl.style.transition = "transform .25s";
     pipCtl.style.transform = "";
+    const x = (e.type === "pointercancel" || e.clientX == null) ? pipXLast : e.clientX;
     // 門檻只需防「點暫停時手滑」——40px 已遠大於點擊抖動 (拖曳判定 8px)
-    if (e.clientX - pipX0 > 40) collapsePip();
+    if (x - pipX0 > 40) collapsePip();
     else wrap.style.transform = "";
-  });
+  };
+  addEventListener("pointerup", pipEnd);
+  addEventListener("pointercancel", pipEnd);
   wrap.addEventListener("click", e => {   // 拖曳結束的 click 不觸發影片播放
     if (pipMoved) { e.stopPropagation(); e.preventDefault(); pipMoved = false; }
   }, true);
