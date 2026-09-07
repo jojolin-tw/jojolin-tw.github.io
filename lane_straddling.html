@@ -115,6 +115,10 @@
   .hud-evid .num { font-size: 1.25rem; }
   .hud-evid .num.hit { color: var(--danger); }
   .hud-evid .lbl { color: var(--muted); font-size: .72rem; font-weight: 400; display: block; }
+  /* 門檻進度條 (全站同一語言: 未達＝琥珀, 達門檻＝紅) */
+  .hud-evid .bar { display: block; height: 4px; border-radius: 2px; background: rgba(148,163,184,.25); margin: .3rem 0 .05rem; overflow: hidden; }
+  .hud-evid .bar i { display: block; height: 100%; width: 0; background: var(--warn); transition: width .12s; }
+  .hud-evid.hit .bar i { background: var(--danger); }
   .hud-verdict { top: 4.9rem; right: .7rem; font-size: .95rem; display: none; }
   .hud-verdict.violation { color: var(--danger); border-color: rgba(248,113,113,.6); }
   .hud-verdict.ok { color: var(--green); border-color: rgba(52,211,153,.6); }
@@ -443,6 +447,7 @@
         <div class="hud hud-evid" data-tip="目前壓線行為的累積證據秒數（只算有壓線樣本的時間，缺框空窗不計）；達到 5 秒門檻即成立">
           <span id="hud-evid" class="num">0.00 s</span>
           <span class="lbl">壓線證據（門檻 5 s）</span>
+          <span class="bar"><i id="hud-evid-bar"></i></span>
         </div>
         <div id="hud-verdict" class="hud hud-verdict"></div>
         <div class="hud hud-live" data-tip="畫面上的框線、遮罩、數據與下方曲線都由網頁以演算法逐幀輸出即時繪製，與影片同步——可逐幀驗證，不是烤好的字幕"><span class="dot"></span>車機演算法重現・推論幀 4 FPS</div>
@@ -1113,6 +1118,8 @@ function tick() {
   const [evid] = evidUpTo(t);
   hudEvid.textContent = evid.toFixed(2) + " s";
   hudEvid.className = "num" + (evid >= MIN_DUR ? " hit" : "");
+  hudEvid.parentElement.classList.toggle("hit", evid >= MIN_DUR);
+  document.getElementById("hud-evid-bar").style.width = Math.min(100, evid / MIN_DUR * 100) + "%";
   // 判定徽章: 播到該刻浮出, 顯示最近一個
   let badge = null;
   for (const b of cs.badges) { if (b.t <= t + 0.01) badge = b; else break; }

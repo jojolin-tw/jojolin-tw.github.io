@@ -270,6 +270,16 @@ kbd{
 #hud.over { border-color: rgba(255,77,79,.75); box-shadow: 0 0 0 1px rgba(255,77,79,.35); }
 #hud.over .hud-spd, #hud.over .hud-j { color: var(--red); }
 
+/* 封面截圖模式 (#thumb&i=N): 只留地圖、HUD、影片小窗 */
+body.thumbmode header, body.thumbmode #introbar, body.thumbmode #vpane, body.thumbmode #body > aside,
+body.thumbmode footer, body.thumbmode #mstrip, body.thumbmode #mgps, body.thumbmode .leaflet-control-container { display: none !important; }
+body.thumbmode #body { flex-direction: column; }
+body.thumbmode #vpip { display: block; position: absolute; right: 14px; bottom: 14px; width: 30%; z-index: 1001; }
+body.thumbmode #vpip .vcard { display: none; } body.thumbmode #vpip .vcard.active { display: block; }
+body.thumbmode #vpip .pipbtn, body.thumbmode #vpip .pipnone { display: none; }
+body.thumbmode #vpip .vcap { display: flex; flex-direction: column; padding: 4px 8px; background: rgba(11,14,19,.9); font-size: 11px; color: var(--tx3); }
+body.thumbmode #vpip .vcap b { color: var(--tx); font-size: 12px; }
+body.thumbmode #hud { top: 14px; right: 14px; transform: scale(1.25); transform-origin: top right; }
 /* 手機專用元件, 桌機一律隱藏 */
 #vpip, #infoSheet, #mstrip, #mgps { display: none; }
 
@@ -360,7 +370,7 @@ kbd{
   <a href="index.html" style="color:#94a3b8;text-decoration:none;font-size:13px;border:1px solid #334155;border-radius:999px;padding:3px 12px;white-space:nowrap">← 主頁</a>
   <span style="font-size:12px;font-weight:700;letter-spacing:1.5px;color:#4a9eff;background:rgba(74,158,255,.12);border-radius:999px;padding:3px 11px;white-space:nowrap">分頁 04</span>
   <h1 style="white-space:nowrap">持續超速偵測：圖資匹配逐點回放</h1>
-  <button id="btnFlow" class="flow-btn" type="button">演算法流程圖 ▾</button>
+  <button id="btnFlow" class="flow-btn" type="button">系統流程圖 ▾</button>
   <span class="sub" id="hdev"></span>
   <span id="hEvents"></span>
   <span class="spacer"></span>
@@ -1353,7 +1363,7 @@ else syncVideosFromReplay();
   // 說明層
   const sheet = document.createElement('div');
   sheet.id = 'infoSheet';
-  sheet.innerHTML = '<div class="sh-head">持續超速偵測・演算法流程與說明<button class="sh-close" type="button">✕ 關閉</button></div>'
+  sheet.innerHTML = '<div class="sh-head">持續超速偵測・系統流程與說明<button class="sh-close" type="button">✕ 關閉</button></div>'
                   + '<div class="sh-body"></div>';
   document.body.appendChild(sheet);
   const shBody = sheet.querySelector('.sh-body');
@@ -1363,7 +1373,7 @@ else syncVideosFromReplay();
     if (mq.matches) { sheet.classList.add('open'); return; }
     const open = flowPanelEl.hidden;
     flowPanelEl.hidden = !open; introbar.hidden = !open;
-    btnFlow.textContent = open ? '演算法流程圖 ▴' : '演算法流程圖 ▾';
+    btnFlow.textContent = open ? '系統流程圖 ▴' : '系統流程圖 ▾';
     btnFlow.classList.toggle('open', open);
     requestAnimationFrame(() => { map.invalidateSize(); render(); });
   };
@@ -1391,7 +1401,7 @@ else syncVideosFromReplay();
     for (const id in iconOnly) { fullText[id] = $(id).textContent; $(id).textContent = iconOnly[id]; }
     const back = document.querySelector('header > a'); fullText._back = back.textContent; back.textContent = '←';
     flowWasHidden = flowPanel.hidden; flowPanel.hidden = false; introbar.hidden = true;
-    btnFlow.textContent = '演算法流程圖'; btnFlow.classList.remove('open');
+    btnFlow.textContent = '系統流程圖'; btnFlow.classList.remove('open');
     shBody.append(...movable.filter(el => !el.classList.contains('vcard')));
     document.querySelectorAll('.vcard').forEach(el => pip.appendChild(el));
     requestAnimationFrame(() => { map.invalidateSize(); render(); drawStrip(); });
@@ -1402,11 +1412,18 @@ else syncVideosFromReplay();
     sheet.classList.remove('open');
     movable.forEach(el => { const a = anchors.get(el); a.parentNode.insertBefore(el, a); el.classList.remove('active'); });
     flowPanel.hidden = flowWasHidden; introbar.hidden = flowWasHidden;
-    btnFlow.textContent = flowWasHidden ? '演算法流程圖 ▾' : '演算法流程圖 ▴'; btnFlow.classList.toggle('open', !flowWasHidden);
+    btnFlow.textContent = flowWasHidden ? '系統流程圖 ▾' : '系統流程圖 ▴'; btnFlow.classList.toggle('open', !flowWasHidden);
     requestAnimationFrame(() => { map.invalidateSize(); render(); drawStrip(); });
   }
   const apply = () => (mq.matches ? toMobile() : toDesktop());
   mq.addEventListener('change', apply); apply();
+  // 封面模式: 強制走手機版搬移 (影片進小窗), 再跳到指定索引
+  const TH = /thumb/.test(window.__initHash || '') ? (window.__initHash.match(/i=(\d+)/) || [])[1] : null;
+  if (TH != null) {
+    document.body.classList.add('thumbmode');
+    toMobile();
+    requestAnimationFrame(() => { go(+TH); map.invalidateSize(); map.setView([P[+TH].lat, P[+TH].lon], 18, { animate: false }); render(); });
+  }
 
   // 小窗只顯示游標所在事件的影片 (沿用同步 JS 的灰幕狀態: 灰幕隱藏＝在窗內)
   (function pipLoop() {

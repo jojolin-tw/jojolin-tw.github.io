@@ -125,6 +125,10 @@
   .hud-overlap .num { font-size: 1.25rem; }
   .hud-overlap .num.pass { color: var(--green); }
   .hud-overlap .lbl { color: var(--muted); font-size: .72rem; font-weight: 400; display: block; }
+  /* 門檻進度條 (全站同一語言: 未達＝琥珀, 達門檻＝綠) */
+  .hud-overlap .bar { display: block; height: 4px; border-radius: 2px; background: rgba(148,163,184,.25); margin: .3rem 0 .05rem; overflow: hidden; }
+  .hud-overlap .bar i { display: block; height: 100%; width: 0; background: var(--warn); transition: width .12s; }
+  .hud-overlap.hit .bar i { background: var(--green); }
   .hud-live { bottom: .7rem; left: .7rem; display: flex; align-items: center; gap: .45rem;
     font-size: .78rem; color: var(--green); }
   .hud-live .dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--green);
@@ -470,6 +474,7 @@
         <div class="hud hud-overlap" data-tip="演算法的判決依據：只在停止標誌觀察窗內累計的靜止秒數，超過 0.5 秒門檻即判有停讓">
           <span id="hud-overlap" class="num">0.000 s</span>
           <span class="lbl">觀察窗內累積停等（門檻 0.5 s）</span>
+          <span class="bar"><i id="hud-overlap-bar"></i></span>
         </div>
         <div class="hud hud-live" data-tip="畫面上的框線、數據與下方曲線都由網頁以演算法逐幀輸出即時繪製，與影片同步——可逐幀驗證，不是烤好的字幕"><span class="dot"></span>雲端演算法重現・24 FPS</div>
       </div>
@@ -1011,6 +1016,8 @@ function tick() {
   const ov = overlapUpTo(t);
   hudOverlap.textContent = ov.toFixed(3) + " s";
   hudOverlap.className = "num" + (ov > THRESHOLD ? " pass" : "");
+  hudOverlap.parentElement.classList.toggle("hit", ov > THRESHOLD);
+  document.getElementById("hud-overlap-bar").style.width = Math.min(100, ov / THRESHOLD * 100) + "%";
   drawOverlay(t);
   drawScrub(t);
   drawCursors(t);
