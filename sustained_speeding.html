@@ -189,39 +189,166 @@ kbd{
 @media (min-width: 2200px) { header, #introbar, #vpane, aside, footer { zoom: 1.3; } }
 @media (min-width: 3200px) { header, #introbar, #vpane, aside, footer { zoom: 1.75; } }
 
-#mtabs { display: none; }
+/* 簡介列: 摘要 + 流程圖按鈕 */
+#introbar .ib-row { display: flex; align-items: center; gap: 12px; }
+#introbar .ib-sum { flex: 1; min-width: 0; }
+.flow-btn { flex: 0 0 auto; background: none; color: #94a3b8; font: inherit; font-size: 12px;
+  border: 1px solid #334155; border-radius: 999px; padding: 3px 12px; cursor: pointer; white-space: nowrap; }
+.flow-btn:hover { color: #e2e8f0; border-color: #94a3b8; }
+.flow-btn.open { color: #4a9eff; border-color: rgba(74,158,255,.5); }
+#flowPanel { padding: 10px 0 4px; }
+.flow { display: flex; align-items: stretch; gap: 8px; }
+.fstep { flex: 1 1 0; background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 3px; }
+.fstep b { color: #e2e8f0; font-size: 12.5px; }
+.fstep span { color: #94a3b8; font-size: 11px; line-height: 1.5; }
+.fstep span b { color: #e2e8f0; font-size: 11px; }
+.fstep.hot { border-color: #e3b341; }
+.fstep.hot > b { color: #e3b341; }
+.farr { flex: 0 0 auto; align-self: center; color: #94a3b8; font-style: normal; font-size: 16px; }
+.gloss { margin-top: 8px; font-size: 11.5px; color: #94a3b8; line-height: 1.6; }
+.gloss b { color: #e2e8f0; }
+
+/* 不該折行的短標籤一律 nowrap: 事件卡標題列改成整個 span 換行而非字中斷行 */
+#vpane div[style*="align-items:baseline"] { flex-wrap: wrap; row-gap: 0; }
+#vpane div[style*="align-items:baseline"] > span { white-space: nowrap; }
+.fstep > b, .flow-btn, .tnow, .tidx, .ctl button, .hero .u, .kv span, .sec h2, .badge { white-space: nowrap; }
+#hud .hud-row, #hud .hud-j { white-space: nowrap; }
+
+/* header: 事件狀態字串放中段 (原 spacer 左側空白); 圖磚/ROI 數徽章屬工程細節, 隱藏 */
+#hEvents { font-size: 11.5px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#hEvents b { color: var(--tx); } #hEvents b.over { color: var(--red); }
+.badge:has(#hTiles), .badge:has(#hRois) { display: none; }
+/* 右欄精簡: 索引/圖磚 ref_id/磚 id 清單/方位/高度/日夜/isStable/roi id 屬純工程雜訊 */
+.kv:has(#dIdx), .kv:has(#dRef), .kv:has(#dBear), .kv:has(#dAlt), .kv:has(#dDay), .kv:has(#mStable) { display: none; }
+#dApi br, #dApi span[style*="#3fb950"], #dApi span[style*="#ff6b6e"] { display: none; }
+.roi .m span:last-child { display: none; }
+/* 驗證區 (與其他分頁「驗證：…」同格式的精簡版) */
+.vstats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
+.vstats > div { background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+.vstats b { display: block; font-size: 18px; color: var(--tx); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.vstats b.ok { color: var(--green); }
+.vstats span { display: block; font-size: 10.5px; color: var(--tx3); line-height: 1.35; margin-top: 3px; }
+.vtab { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-bottom: 6px; }
+.vtab th { text-align: left; color: var(--tx3); font-weight: 600; border-bottom: 1px solid var(--line); padding: 2px 4px; }
+.vtab td { padding: 2px 4px; border-bottom: 1px solid rgba(255,255,255,.05); color: var(--tx2); }
+.vtab td:nth-child(2) { text-align: right; font-variant-numeric: tabular-nums; color: var(--tx); }
+.vnote { font-size: 11px; color: var(--tx3); line-height: 1.55; }
+
+/* 判定 HUD: 疊在地圖右上 (左上是 Leaflet 縮放鈕) */
+#hud { position: absolute; top: 10px; right: 10px; z-index: 1001; pointer-events: none;
+  background: rgba(11,14,19,.86); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px 8px;
+  min-width: 176px; font-variant-numeric: tabular-nums; backdrop-filter: blur(3px); }
+#hud .hud-row { display: flex; align-items: baseline; gap: 6px; }
+#hud .hud-spd { font-size: 30px; font-weight: 800; line-height: 1; color: var(--tx); }
+#hud .hud-u { font-size: 11px; color: var(--tx3); }
+#hud .hud-lim { margin-left: auto; display: inline-block; min-width: 34px; padding: 3px 0; border-radius: 50%;
+  border: 3px solid var(--red); background: #fff; color: #111; font-weight: 800; font-size: 13px; text-align: center; }
+#hud .hud-j { margin-top: 5px; font-size: 12.5px; font-weight: 700; color: var(--green); }
+#hud .hud-src { margin-top: 2px; font-size: 10.5px; color: var(--tx3); line-height: 1.4; }
+#hud .hud-road { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--tx2);
+  font-weight: 600; max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#hud .hud-road:empty { display: none; }
+#hud .hud-dist { font-size: 10.5px; color: var(--tx3); margin-top: 1px; }
+#hud .hud-dist:empty { display: none; }
+/* 四關卡燈號 */
+#hud .hud-gates { display: flex; gap: 4px; margin-top: 6px; }
+#hud .hud-gates span { flex: 1; text-align: center; font-size: 9.5px; font-weight: 700; padding: 2px 0; border-radius: 4px;
+  background: rgba(255,77,79,.14); color: #ff8a8c; border: 1px solid rgba(255,77,79,.35); white-space: nowrap; }
+#hud .hud-gates span.on { background: rgba(63,185,80,.14); color: #5fd37a; border-color: rgba(63,185,80,.4); }
+/* 30 秒視窗累積進度 */
+#hud .hud-win { margin-top: 6px; }
+#hud .hud-bar { position: relative; height: 7px; border-radius: 4px; background: var(--panel2); overflow: visible; }
+#hud .hud-bar i { display: block; height: 100%; border-radius: 4px; background: var(--yellow); transition: width .15s; }
+#hud .hud-bar em { position: absolute; top: -3px; bottom: -3px; left: 100%; width: 2px; background: #e6edf3; opacity: .7; }
+#hud .hud-wt { display: block; margin-top: 3px; font-size: 10.5px; color: var(--tx3); font-variant-numeric: tabular-nums; }
+#hud .hud-win.armed .hud-bar i { background: var(--red); }
+#hud .hud-win.armed .hud-wt { color: var(--red); font-weight: 700; }
+#hud.fire { animation: hudfire 1.4s ease-out 1; }
+@keyframes hudfire { 0% { box-shadow: 0 0 0 0 rgba(255,77,79,.9); } 100% { box-shadow: 0 0 0 26px rgba(255,77,79,0); } }
+.vcap { display: none; }
+#hud.over { border-color: rgba(255,77,79,.75); box-shadow: 0 0 0 1px rgba(255,77,79,.35); }
+#hud.over .hud-spd, #hud.over .hud-j { color: var(--red); }
+
+/* 手機專用元件, 桌機一律隱藏 */
+#vpip, #infoSheet, #mstrip, #mgps { display: none; }
+
 @media (max-aspect-ratio: 1/1) {
   #app { height: 100dvh; }
-  header { flex-wrap: wrap; gap: 6px 8px; padding: 6px 10px; }
-  header h1 { white-space: normal !important; font-size: 13px; line-height: 1.3; }
+  header { flex-wrap: nowrap; gap: 6px; padding: 6px 8px; }
+  header > a, header > span:nth-of-type(1) { padding: 3px 8px !important; font-size: 12px !important; letter-spacing: .5px !important; }
+  header h1 { font-size: 11.5px; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   header .sub, header .badge, header .spacer, header #hEvents { display: none; }
-  #introbar { font-size: 11.5px !important; line-height: 1.5 !important; padding: 5px 10px !important;
-    max-height: calc(3em + 10px); overflow: hidden; position: relative; cursor: pointer; }
-  #introbar::after { content: '⋯ 展開'; position: absolute; right: 8px; bottom: 0;
-    padding-left: 14px; color: #4a9eff; font-weight: 700;
-    background: linear-gradient(90deg, rgba(13,21,38,0), #0d1526 30%); }
-  #introbar.open { max-height: none; }
-  #introbar.open::after { content: '收合 ▴'; position: static; padding-left: 6px; background: none; }
-  #mtabs { display: flex; flex: 0 0 auto; background: var(--panel); border-bottom: 1px solid var(--line); }
-  #mtabs button { flex: 1; border: none; border-radius: 0; background: transparent; color: var(--tx3);
-    padding: 7px 0; font-size: 12px; font-weight: 700; border-bottom: 2px solid transparent; }
-  #mtabs button.on { color: #fff; border-bottom-color: #4a9eff; background: rgba(74,158,255,.08); }
+  header #hEvents { display: none; }
+  #btnFlow { flex: 0 0 auto; background: rgba(74,158,255,.12); color: #4a9eff; border-color: rgba(74,158,255,.4);
+    padding: 3px 9px; font-weight: 700; }
+  #hud .hud-gates span { font-size: 9px; }
+  #introbar { display: none !important; }
   #body { flex-direction: column; }
-  /* 面板緊貼頁籤、地圖靠時間軸; 面板可收縮 (flex-shrink)、地圖保底 34vh, 兩者合計不得把底欄推出視窗 */
-  #mapwrap { flex: 1 1 0; min-height: 34vh; order: 1; }
-  #vpane, #body > aside { display: none !important; width: 100% !important; flex: 0 1 auto !important;
-    min-height: 0; max-height: 40vh; overflow-y: auto; border-left: none; border-right: none !important;
-    border-bottom: 1px solid var(--line); }
-  #vpane div[style*="align-items:baseline"] { flex-wrap: wrap; row-gap: 0; }
-  #vpane div[style*="align-items:baseline"] > span:first-child { white-space: nowrap; }
-  #body.tab-video #vpane { display: flex !important; }
-  #body.tab-data > aside:not(#vpane) { display: block !important; }
+  #vpane, #body > aside { display: none !important; }
+  #mapwrap { flex: 1 1 0; min-height: 0; }
+  /* header 下獨立資訊條: 時間・道路類型・事件狀態 */
+  #mstrip { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; padding: 5px 10px; background: #0d1526;
+    border-bottom: 1px solid #263349; font-size: 11.5px; color: #94a3b8; white-space: nowrap; overflow: hidden; }
+  #mstrip .ms-t { font-weight: 800; color: var(--tx); font-variant-numeric: tabular-nums; }
+  #mstrip .ms-lt { padding: 1px 7px; border-radius: 4px; font-size: 10.5px; font-weight: 700; color: #fff; background: #6b7888; }
+  #mstrip .ms-lt.u { background: #1f6feb; } #mstrip .ms-lt.e { background: #8957e5; }
+  #mstrip .ms-ev { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  #mstrip .ms-ev b { color: var(--tx); }
+  #mstrip .ms-ev b.over { color: var(--red); }
+  #hud { top: 8px; right: 8px; min-width: 150px; padding: 6px 10px 7px; max-width: 62%; }
+  #hud .hud-spd { font-size: 26px; }
+  #hud .hud-road { max-width: none; }
+  /* 左下: 定位/感測/圖磚小卡 */
+  #mgps { display: block; position: absolute; left: 8px; bottom: 44px; z-index: 1000; pointer-events: none;
+    background: rgba(11,14,19,.86); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px;
+    font-size: 10.5px; color: var(--tx3); line-height: 1.55; white-space: nowrap; backdrop-filter: blur(3px); }
+  #mgps b { color: var(--tx2); font-weight: 600; font-variant-numeric: tabular-nums; }
+  #mgps .ok { color: var(--green); } #mgps .bad { color: var(--red); }
+  /* 影片小窗: 右下, 讓開 Leaflet 比例尺與版權列 */
+  #vpip { display: block; position: absolute; right: 8px; bottom: 44px; width: 40%; z-index: 1001;
+    transition: width .2s; }
+  /* 放大上限以視窗高度計 (地圖約 70dvh, 影片高 ≤ 其 40% → 寬 ≤ 50dvh), 車在地圖中心不被蓋 */
+  #vpip.big { width: min(92%, 50dvh); }
+  #vpip .vcap { display: flex; flex-direction: column; gap: 1px; padding: 4px 7px; background: rgba(11,14,19,.9);
+    border-top: 1px solid var(--line); font-size: 10px; color: var(--tx3); white-space: nowrap; overflow: hidden; }
+  #vpip .vcap b { color: var(--tx); font-size: 11px; }
+  #vpip .vcap span { overflow: hidden; text-overflow: ellipsis; }
+  #vpip .vcard { display: none; box-shadow: 0 2px 12px rgba(0,0,0,.6); }
+  #vpip .vcard.active { display: block; }
+  #vpip .vcard video { cursor: pointer; }
+  #vpip .pipbtn { position: absolute; top: 4px; right: 4px; z-index: 2; background: rgba(11,14,19,.75);
+    color: #e6edf3; border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; font-size: 13px; line-height: 1.3; }
+  #vpip .pipnone { display: none; background: rgba(11,14,19,.82); border: 1px solid var(--line); border-radius: 6px;
+    color: #9aa7b5; font-size: 11px; padding: 5px 9px; white-space: nowrap; }
+  #vpip.none { width: auto; }
+  #vpip.none .pipnone { display: block; }
+  #vpip.none .pipbtn { display: none; }
+  /* 說明全屏層 */
+  #infoSheet { position: fixed; inset: 0; z-index: 3000; background: var(--bg); flex-direction: column; }
+  #infoSheet.open { display: flex; }
+  #infoSheet .sh-head { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    background: var(--panel); border-bottom: 1px solid var(--line); font-weight: 800; font-size: 14px; }
+  #infoSheet .sh-close { margin-left: auto; background: var(--panel2); color: var(--tx); border: 1px solid var(--line);
+    border-radius: 999px; padding: 3px 12px; font-size: 13px; }
+  #infoSheet .sh-body { flex: 1 1 0; overflow-y: auto; padding: 12px 14px 28px; display: flex; flex-direction: column; gap: 14px; }
+  #infoSheet .sh-body > div { border-top: none !important; padding-top: 0 !important; }
+  #infoSheet .flow { flex-direction: column; }
+  #infoSheet .farr { transform: rotate(90deg); }
+  #infoSheet .sec { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  #infoSheet .lp-text { font-size: 13px !important; }
+  #infoSheet .gloss { font-size: 12.5px; }
   footer { padding: 6px 8px 8px; }
   footer .lg { display: none; }
   #strip { height: 44px; touch-action: none; }
-  .ctl { flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-  .ctl button { padding: 5px 9px; }
-  .tnow, .tidx { min-width: 0; }
+  .ctl { flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .ctl button { padding: 5px 7px; font-size: 12px; }
+  #bGrid, #bFirst, #bLast { display: none; }   /* 網格是工程功能; 首/末點由滑桿代替 */
+  .ctl { gap: 4px; }
+  .ctl button { padding: 5px 6px; }
+  .tnow { font-size: 12.5px; }
+  .tnow { min-width: 0; }
+  .tidx { display: none; }   /* 點索引是工程資訊, 手機省位 */
   #slider { flex: 1 1 100%; order: 10; }
 }
 </style>
@@ -233,6 +360,7 @@ kbd{
   <a href="index.html" style="color:#94a3b8;text-decoration:none;font-size:13px;border:1px solid #334155;border-radius:999px;padding:3px 12px;white-space:nowrap">← 主頁</a>
   <span style="font-size:12px;font-weight:700;letter-spacing:1.5px;color:#4a9eff;background:rgba(74,158,255,.12);border-radius:999px;padding:3px 11px;white-space:nowrap">分頁 04</span>
   <h1 style="white-space:nowrap">持續超速偵測：圖資匹配逐點回放</h1>
+  <button id="btnFlow" class="flow-btn" type="button">演算法流程圖 ▾</button>
   <span class="sub" id="hdev"></span>
   <span id="hEvents"></span>
   <span class="spacer"></span>
@@ -243,7 +371,7 @@ kbd{
   </span>
   <span class="badge">超速 <b id="hOver" class="over">-</b></span>
 </header>
-<div id="introbar" style="flex:0 0 auto;background:#0d1526;border-bottom:1px solid #263349;padding:6px 14px;font-size:12.5px;color:#94a3b8;line-height:1.6">真實客戶事件——一段約 9 分鐘的行程內兩次持續超速，中間因<b style="color:#e2e8f0">速限變換（70→50、快速道路→市區）</b>而重新起算、不成事件。左欄兩支影片各對應一次超速，與回放雙向同步（影片配合時間軸流速加速播放，約 8×）。名詞對照：<b style="color:#e2e8f0">Street ROI</b>＝圖資中的道路匹配區（折線幾何＋路寬半徑）；<b style="color:#e2e8f0">粗篩/細算</b>＝R-tree 包圍盒篩選＋點到折線幾何距離；<b style="color:#e2e8f0">Location Type</b>＝影像判別的市區/快速道路狀態（決定無圖資時退回哪個預設速限）。拖曳底部時間軸或按空白鍵播放，地圖可縮放。</div>
+<div id="introbar" hidden style="flex:0 0 auto;background:#0d1526;border-bottom:1px solid #263349;padding:6px 14px;font-size:12.5px;color:#94a3b8;line-height:1.6"><div id="flowPanel" hidden><div class="flow"><div class="fstep"><b>① 車機 GPS 逐點</b><span>GPS 每秒 1 筆、逐秒判速（速度、速度誤差、定位誤差；影像判別是否移動中、市區或快速道路）；圖資比對每 5 秒一次</span></div><i class="farr">→</i><div class="fstep"><b>② 圖資匹配取速限</b><span>R-tree 包圍盒粗篩 → 點到折線幾何距離細算 → 命中路段速限；無圖資時依 Location Type 退回預設速限</span></div><i class="farr">→</i><div class="fstep"><b>③ 四關卡逐點判定</b><span>速度−速度誤差 ≥ 速限・定位誤差 &lt;15 m・速度誤差 &lt;2 m/s・影像判定移動中</span></div><i class="farr">→</i><div class="fstep hot"><b>④ 視窗累積上報</b><span>頭尾皆超速、佔比 &gt;50%，滿 30 秒上報；<b>速限一變即重新起算</b>——兩事件之間雖也有超過新速限的點，但湊不滿 30 秒</span></div></div><div class="gloss">名詞對照：<b>Street ROI</b>＝圖資中的道路匹配區（折線幾何＋路寬半徑）；<b>粗篩/細算</b>＝R-tree 包圍盒篩選＋點到折線幾何距離；<b>Location Type</b>＝影像判別的市區/快速道路狀態（決定無圖資時退回哪個預設速限）。</div><div class="gloss">關於解析度：本頁以車機上傳的 <b>5 秒一筆</b>感測資料重現（上傳流量考量），回放因此以 5 秒為一步；車機端實際逐秒判速。重現的兩次上報時點與累積秒數皆與車機一致。</div></div></div>
 
 <div id="body">
   
@@ -268,13 +396,15 @@ kbd{
       <span style="font-size:11.5px;color:#9aa7b5">
         限 70・最高 82 km/h・08:17:20（台灣時間）</span>
     </div>
-    <div style="position:relative;border-radius:8px;overflow:hidden;background:#000;
+    <div class="vcard" style="position:relative;border-radius:8px;overflow:hidden;background:#000;
       border:1px solid var(--line)">
       <video id="vidA" src="assets/videos/sustained_speeding/pairA.mp4" muted
-        playsinline preload="auto" style="display:block;width:100%;cursor:pointer"></video>
+        playsinline preload="auto" title="點擊播放／暫停；影片與地圖回放雙向同步"
+        style="display:block;width:100%;cursor:pointer"></video>
       <div id="vmaskA" style="position:absolute;inset:0;display:flex;
         align-items:center;justify-content:center;background:rgba(8,12,20,.82);
         color:#9aa7b5;font-size:12px;pointer-events:none">回放尚未進入此事件</div>
+      <div class="vcap"><b>事件一・快速道路</b><span>限 70・最高 82 km/h・超速 105 秒</span></div>
     </div>
   </div>
   
@@ -286,20 +416,18 @@ kbd{
       <span style="font-size:11.5px;color:#9aa7b5">
         限 50・最高 61 km/h・08:22:55（台灣時間）</span>
     </div>
-    <div style="position:relative;border-radius:8px;overflow:hidden;background:#000;
+    <div class="vcard" style="position:relative;border-radius:8px;overflow:hidden;background:#000;
       border:1px solid var(--line)">
       <video id="vidB" src="assets/videos/sustained_speeding/pairB.mp4" muted
-        playsinline preload="auto" style="display:block;width:100%;cursor:pointer"></video>
+        playsinline preload="auto" title="點擊播放／暫停；影片與地圖回放雙向同步"
+        style="display:block;width:100%;cursor:pointer"></video>
       <div id="vmaskB" style="position:absolute;inset:0;display:flex;
         align-items:center;justify-content:center;background:rgba(8,12,20,.82);
         color:#9aa7b5;font-size:12px;pointer-events:none">回放尚未進入此事件</div>
+      <div class="vcap"><b>事件二・市區道路</b><span>限 50・最高 61 km/h・超速 48 秒</span></div>
     </div>
   </div>
-  <div style="font-size:11.5px;color:#9aa7b5;line-height:1.6">
-    <b style="color:#e6edf3">影片與回放雙向同步</b>——點影片播放，地圖與面板跟著走；
-    操作時間軸則影片跟著跳。回放游標落在哪個事件窗，對應影片亮起、另一支蓋灰幕。
-  </div>
-  <div style="border-top:1px solid var(--line);padding-top:9px;font-size:12px;
+  <div class="lp-text" style="border-top:1px solid var(--line);padding-top:9px;font-size:12px;
     line-height:1.7;color:#9aa7b5">
     <div style="color:#e6edf3;font-weight:800;margin-bottom:3px">判定規則</div>
     GPS「速度−速度誤差」≥ 路段速限、定位誤差 &lt;15 m、速度誤差 &lt;2 m/s、
@@ -307,13 +435,24 @@ kbd{
     <b style="color:#e6edf3">速限一變，視窗重新起算</b>——兩事件之間雖也有超過新速限的點，
     但湊不滿 30 秒，所以不上報。
   </div>
-  <div style="border-top:1px solid var(--line);padding-top:9px;font-size:12px;
-    line-height:1.7;color:#9aa7b5">
-    <div style="color:#e6edf3;font-weight:800;margin-bottom:3px">上線驗證（實際計數）</div>
-    四週 <b style="color:#e6edf3">1,696 筆</b>上線事件全數人工檢視：誤判率
-    <b style="color:#e6edf3">1.9%</b>（32 筆）；逐筆覆核 root cause 後，多數是圖資
-    速限錯誤（16 筆）或人工標記本身錯誤（7 筆），可歸咎演算法的僅
-    <b style="color:#e6edf3">0.4%</b>。
+  <div class="lp-text valid" style="border-top:1px solid var(--line);padding-top:9px;font-size:12px;
+    line-height:1.6;color:#9aa7b5">
+    <div style="color:#e6edf3;font-weight:800;margin-bottom:6px">驗證：上線四週全量人工檢視</div>
+    <div class="vstats">
+      <div><b>1,696</b><span>筆上報事件<br>全數逐筆人工檢視</span></div>
+      <div><b>1.9%</b><span>誤判率<br>32 筆</span></div>
+      <div><b class="ok">0.4%</b><span>可歸咎演算法<br>7 筆</span></div>
+    </div>
+    <table class="vtab">
+      <tr><th>誤判 32 筆 root cause</th><th>筆數</th><th>歸屬</th></tr>
+      <tr><td>圖資速限標錯</td><td>16</td><td>圖資</td></tr>
+      <tr><td>人工標記本身錯誤</td><td>7</td><td>標記</td></tr>
+      <tr><td>無圖資、退回預設速限</td><td>6</td><td>演算法</td></tr>
+      <tr><td>市區／快速道路判別錯</td><td>1</td><td>演算法</td></tr>
+      <tr><td>畫面全黑無法覆核</td><td>2</td><td>不可判</td></tr>
+    </table>
+    <div class="vnote">母體＝車機已上報事件，Recall 無法由此推得；漏報面另以含多次速限變換的固定路線反覆路測驗證。
+      本頁兩事件以離線重跑逐位核對車機上報秒數（105.2 s／48.0 s）一致。</div>
   </div>
 </aside>
 <div id="mapwrap"><div id="map"></div></div>
@@ -1073,31 +1212,215 @@ const H0 = window.__initHash || '';
 if (!/^#\d+$/.test(H0)) go(t2idx(VWINS[0].t0));
 else syncVideosFromReplay();
 
-/* ---------- 手機版頁籤 (影片 / 地圖 / 數據) ---------- */
+/* ---------- 判定 HUD (桌機/手機皆有): 鏡射右欄即時欄位 ---------- */
+(function () {
+  const hud = document.createElement('div');
+  hud.id = 'hud';
+  hud.innerHTML = '<div class="hud-row"><span class="hud-spd">-</span><span class="hud-u">km/h</span>'
+                + '<span class="hud-lim">--</span></div><div class="hud-j">-</div>'
+                + '<div class="hud-gates"><span data-g="speedy">速度達標</span><span data-g="accurate">定位 &lt;15m</span>'
+                + '<span data-g="spdAccurate">速差 &lt;2m/s</span><span data-g="moving">移動中</span></div>'
+                + '<div class="hud-win"><div class="hud-bar"><i style="width:0"></i><em></em></div><span class="hud-wt">視窗未起算</span></div>'
+                + '<div class="hud-src"></div><div class="hud-road"></div><div class="hud-dist"></div>';
+  $('mapwrap').appendChild(hud);
+  const q = c => hud.querySelector(c);
+  /* 30 秒視窗線上重現 (顯示用): 從目前點往回找最遠的超速點 s, 使 [s, i] 內超速佔比 > 50%,
+     且中途速限未變 (速限一變即重新起算)。與離線 replay/algorithm.py 的 longest_speeding 同一組條件
+     (頭尾皆超速、佔比 > 0.5), 只是改成逐點累積。已用本頁 113 點驗證: 只在兩個真實事件內達 30 s,
+     累積 105 / 45 s, 視窗起點與車機事件起點差 1 個點以內。 */
+  const WIN_THRESHOLD = 30;
+  function winInfo(i) {
+    const lim = derive[i].lim;
+    let best = -1, pos = 0;
+    for (let s0 = i; s0 >= 0; s0--) {
+      if (derive[s0].lim !== lim) break;
+      if (derive[s0].over) pos++;
+      if (derive[s0].over && pos > 0.5 * (i - s0 + 1)) best = s0;
+    }
+    if (best < 0) return { sec: 0, start: -1 };
+    return { sec: (P[i].t - P[best].t) / 1000, start: best };
+  }
+  // 上報時點 = 各事件窗內首個累積達門檻的點
+  const FIRE_IDX = VWINS.map(w => {
+    for (let i = 0; i < P.length; i++)
+      if (P[i].t >= w.t0 - 2500 && P[i].t <= w.t1 + 2500 && winInfo(i).sec >= WIN_THRESHOLD) return i;
+    return -1;
+  }).filter(i => i >= 0);
+  let lastCur = -1;
+  // 時間軸畫上報旗標 (包裝模板 drawStrip; 原 resize 監聽抓的是舊參考, 另掛一個)
+  const _drawStrip = drawStrip;
+  drawStrip = function () {
+    _drawStrip();
+    const W = cv.clientWidth, n = P.length;
+    cx.save(); cx.font = '800 11.5px "Noto Sans TC","Microsoft JhengHei",sans-serif'; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+    FIRE_IDX.forEach((fi, k) => {
+      const x = (fi + 0.5) / n * W, label = '事件' + '一二三四'[k] + ' 上報', tw = cx.measureText(label).width;
+      cx.fillStyle = '#ff4d4f';
+      cx.fillRect(x - 1, 0, 2, cv.clientHeight);
+      // 標籤放在旗標右側的紅底白字膠囊, 靠右緣時翻到左側
+      const bw = tw + 14, bh = 17, bx = x + bw + 6 > W ? x - 6 - bw : x + 6, by = 3;
+      cx.fillStyle = 'rgba(11,14,19,.92)'; cx.strokeStyle = '#ff4d4f'; cx.lineWidth = 1.5;
+      cx.beginPath(); cx.roundRect(bx, by, bw, bh, 4); cx.fill(); cx.stroke();
+      cx.fillStyle = '#fff'; cx.fillText(label, bx + bw / 2, by + bh / 2 + 0.5);
+    });
+    cx.restore();
+  };
+  window.addEventListener('resize', () => drawStrip());
+  drawStrip();
+  // 手機版: header 下資訊條 + 左下定位/感測小卡 (桌機 CSS 隱藏)
+  const strip = document.createElement('div');
+  strip.id = 'mstrip';
+  strip.innerHTML = '<span class="ms-t">--:--:--</span><span class="ms-lt">-</span><span class="ms-ev"></span>';
+  $('body').parentNode.insertBefore(strip, $('body'));
+  const gps = document.createElement('div');
+  gps.id = 'mgps';
+  $('mapwrap').appendChild(gps);
+  const LT = { '0': ['未知路型', ''], '1': ['市區', 'u'], '2': ['快速道路', 'e'] };
+  const EVN = { A: '事件一・快速道路', B: '事件二・市區道路' };
+  function eventStatus(ms) {
+    for (const v of VWINS) {
+      if (ms >= v.t0 - 2500 && ms <= v.t1 + 2500)   // 與影片同步同一個 ±2.5s 容差 (點距 5s)
+        return '<b class="over">' + EVN[v.tag] + '</b>｜超速進行中 <b>' + Math.max(0, (ms - v.t0) / 1000).toFixed(0)
+             + '</b> / ' + ((v.t1 - v.t0) / 1000).toFixed(0) + ' s';
+    }
+    if (ms < VWINS[0].t0) return '行程開始・尚未達持續超速（距事件一 ' + ((VWINS[0].t0 - ms) / 1000).toFixed(0) + ' s）';
+    if (ms > VWINS[VWINS.length - 1].t1) return '事件二已結束・行程收尾';
+    return '<b>速限變換 70→50</b>・視窗重新起算、湊不滿 30 秒不上報';
+  }
+  let queued = false;
+  function refresh() {
+    queued = false;
+    q('.hud-spd').textContent = $('dSpd').textContent;
+    q('.hud-lim').textContent = $('dLim').textContent;
+    const j = $('dOver').querySelector('span');
+    q('.hud-j').textContent = j ? j.textContent : $('dOver').textContent;
+    hud.classList.toggle('over', !!$('dOver').querySelector('.over'));
+    const src = $('dLimSrc').firstChild ? $('dLimSrc').firstChild.textContent.trim() : '';
+    const hit = $('dFine').textContent;
+    q('.hud-src').textContent = src + (hit && hit !== '-' ? '・命中 ' + hit + ' 路段' : '');
+    // 採用速限的路段名 (無則第一筆命中); .n 內含 tag span, 只取文字節點
+    const rois = [...document.querySelectorAll('#dRoiList .roi')];
+    const pick = rois.find(r => r.textContent.includes('採用速限')) || rois[0];
+    const nm = pick ? [...pick.querySelector('.n').childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim() : '';
+    q('.hud-road').textContent = nm ? '📍 ' + nm : '';
+    // 四關卡燈號 + 細匹配距離 + 視窗累積
+    const d = derive[cur], pt = P[cur];
+    hud.querySelectorAll('.hud-gates span').forEach(el => el.classList.toggle('on', !!d[el.dataset.g]));
+    const dist = pt.dists && pt.selK != null ? pt.dists[pt.selK] : null;
+    q('.hud-dist').textContent = (dist != null && d.limRoi && d.limRoi.radius != null)
+      ? '距路段中心線 ' + Number(dist).toFixed(1) + ' m／匹配半徑 ' + d.limRoi.radius + ' m' : '';
+    const w = winInfo(cur), armed = w.sec >= WIN_THRESHOLD, win = q('.hud-win');
+    win.classList.toggle('armed', armed);
+    q('.hud-bar i').style.width = Math.min(100, w.sec / WIN_THRESHOLD * 100) + '%';
+    q('.hud-wt').textContent = w.start < 0 ? '視窗未起算（超速點連成 30 s 才上報）'
+      : armed ? '🚩 已上報・視窗累積 ' + w.sec.toFixed(0) + ' s'
+      : '視窗累積 ' + w.sec.toFixed(0) + ' s／門檻 ' + WIN_THRESHOLD + ' s';
+    if (cur !== lastCur) {
+      if (FIRE_IDX.includes(cur)) { hud.classList.remove('fire'); void hud.offsetWidth; hud.classList.add('fire'); }
+      lastCur = cur;
+    }
+    // 桌機 header 中段也放事件狀態 (手機版另有資訊條)
+    $('hEvents').innerHTML = eventStatus(pt.t);
+    // 資訊條
+    const lton = document.querySelector('.lt div.on');
+    const lt = LT[lton ? lton.dataset.t : '0'] || LT['0'];
+    strip.querySelector('.ms-t').textContent = $('dTime').textContent;
+    const ltEl = strip.querySelector('.ms-lt'); ltEl.textContent = lt[0]; ltEl.className = 'ms-lt ' + lt[1];
+    strip.querySelector('.ms-ev').innerHTML = eventStatus(P[cur].t);
+    // 左下小卡
+    const acc = $('dAcc').textContent, sat = $('dSat').textContent, fix = $('dFix').textContent,
+          mov = $('mMov').textContent, cache = $('dCache').textContent.replace(/\s+/g, ' ');
+    const movTxt = mov === '-' ? '-' : (String(mov) === String(MOVING_STATUS_STOP) ? '停止' : '移動中');
+    gps.innerHTML = 'GPS 精度 <b>' + acc + '</b>・衛星 <b>' + sat + '</b><br>'
+                  + '3D 定位 <b class="' + (fix === '是' ? 'ok' : 'bad') + '">' + fix + '</b>・影像 <b>' + movTxt + '</b><br>'
+                  + '圖磚快取 <b>' + cache.replace(' 全程', '') + '</b>';
+  }
+  const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(refresh); } };
+  new MutationObserver(schedule).observe(document.querySelector('#body > aside:not(#vpane)'),
+    { subtree: true, childList: true, characterData: true });
+  schedule();
+})();
+
+/* ---------- 手機版: 影片小窗 + 說明全屏層 (元素搬移, 切回桌機時歸位) ---------- */
 (function () {
   const mq = matchMedia('(max-aspect-ratio: 1/1)');
-  const body = $('body');
-  const tabs = document.createElement('div');
-  tabs.id = 'mtabs';
-  tabs.innerHTML = '<button data-t="video">📹 影片</button>'
-                 + '<button data-t="map">🗺 地圖</button>'
-                 + '<button data-t="data">📊 數據</button>';
-  body.parentNode.insertBefore(tabs, body);
-  function setTab(t) {
-    body.className = 'tab-' + t;
-    tabs.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
-    if (!mq.matches) return;
-    /* 地圖容器高度改變, Leaflet 要重量尺寸再重畫, 否則折線投影錯位 */
-    requestAnimationFrame(() => {
-      map.invalidateSize();
-      if (follow) map.setView([P[cur].lat, P[cur].lon], map.getZoom(), { animate: false });
-      render(); drawStrip();
-    });
+  // 一次性精簡: Motion 標籤白話化、圖例去掉 geo_index 網格說明 (網格鈕本身留給桌機)
+  document.querySelectorAll('.kv span').forEach(sp => {
+    if (sp.textContent.trim() === 'movingStatus') sp.textContent = '影像移動判定 (movingStatus)';
+    else if (sp.textContent.trim() === 'GPS / CV / Sensor') sp.textContent = '三源 GPS / 影像 / 感測';
+  });
+  document.querySelectorAll('.lg > span').forEach(sp => { if (sp.textContent.includes('geo_index')) sp.hidden = true; });
+  // 說明層
+  const sheet = document.createElement('div');
+  sheet.id = 'infoSheet';
+  sheet.innerHTML = '<div class="sh-head">持續超速偵測・演算法流程與說明<button class="sh-close" type="button">✕ 關閉</button></div>'
+                  + '<div class="sh-body"></div>';
+  document.body.appendChild(sheet);
+  const shBody = sheet.querySelector('.sh-body');
+  // header「演算法流程圖」: 桌機展開/收合簡介列面板, 手機開全屏說明層
+  const btnFlow = $('btnFlow'), flowPanelEl = $('flowPanel'), introbar = $('introbar');
+  btnFlow.onclick = () => {
+    if (mq.matches) { sheet.classList.add('open'); return; }
+    const open = flowPanelEl.hidden;
+    flowPanelEl.hidden = !open; introbar.hidden = !open;
+    btnFlow.textContent = open ? '演算法流程圖 ▴' : '演算法流程圖 ▾';
+    btnFlow.classList.toggle('open', open);
+    requestAnimationFrame(() => { map.invalidateSize(); render(); });
+  };
+  sheet.querySelector('.sh-close').onclick = () => sheet.classList.remove('open');
+  // 影片小窗
+  const pip = document.createElement('div');
+  pip.id = 'vpip';
+  pip.innerHTML = '<button class="pipbtn" type="button" title="放大/縮小">⤢</button>'
+                + '<div class="pipnone">尚未進入事件・無影片</div>';
+  $('mapwrap').appendChild(pip);
+  pip.querySelector('.pipbtn').onclick = () => pip.classList.toggle('big');
+
+  // 要搬的節點與各自的原位錨點
+  const flowPanel = $('flowPanel');
+  const covSec = [...document.querySelectorAll('#body > aside .sec')]
+    .find(el => (el.querySelector('h2') || {}).textContent.trim().startsWith('整趟覆蓋率'));
+  const movable = [flowPanel, ...document.querySelectorAll('.lp-text'), covSec, ...document.querySelectorAll('.vcard')]
+    .filter(Boolean);
+  const anchors = new Map(movable.map(el => {
+    const a = document.createComment('slot'); el.parentNode.insertBefore(a, el); return [el, a]; }));
+  let mobile = false, flowWasHidden = true;
+  const iconOnly = {}, fullText = {};
+  function toMobile() {
+    if (mobile) return; mobile = true;
+    for (const id in iconOnly) { fullText[id] = $(id).textContent; $(id).textContent = iconOnly[id]; }
+    const back = document.querySelector('header > a'); fullText._back = back.textContent; back.textContent = '←';
+    flowWasHidden = flowPanel.hidden; flowPanel.hidden = false; introbar.hidden = true;
+    btnFlow.textContent = '演算法流程圖'; btnFlow.classList.remove('open');
+    shBody.append(...movable.filter(el => !el.classList.contains('vcard')));
+    document.querySelectorAll('.vcard').forEach(el => pip.appendChild(el));
+    requestAnimationFrame(() => { map.invalidateSize(); render(); drawStrip(); });
   }
-  tabs.onclick = e => { const b = e.target.closest('button'); if (b) setTab(b.dataset.t); };
-  setTab('video');
-  const intro = $('introbar');
-  if (intro) intro.onclick = () => intro.classList.toggle('open');
+  function toDesktop() {
+    if (!mobile) return; mobile = false;
+    for (const id in fullText) { if (id === '_back') document.querySelector('header > a').textContent = fullText[id]; else $(id).textContent = fullText[id]; }
+    sheet.classList.remove('open');
+    movable.forEach(el => { const a = anchors.get(el); a.parentNode.insertBefore(el, a); el.classList.remove('active'); });
+    flowPanel.hidden = flowWasHidden; introbar.hidden = flowWasHidden;
+    btnFlow.textContent = flowWasHidden ? '演算法流程圖 ▾' : '演算法流程圖 ▴'; btnFlow.classList.toggle('open', !flowWasHidden);
+    requestAnimationFrame(() => { map.invalidateSize(); render(); drawStrip(); });
+  }
+  const apply = () => (mq.matches ? toMobile() : toDesktop());
+  mq.addEventListener('change', apply); apply();
+
+  // 小窗只顯示游標所在事件的影片 (沿用同步 JS 的灰幕狀態: 灰幕隱藏＝在窗內)
+  (function pipLoop() {
+    if (mobile) {
+      let any = false;
+      for (const v of VIDEOS) {
+        const on = v.mask.style.display === 'none';
+        v.el.parentNode.classList.toggle('active', on);
+        any = any || on;
+      }
+      pip.classList.toggle('none', !any);
+    }
+    requestAnimationFrame(pipLoop);
+  })();
 })();
 
 </script>
