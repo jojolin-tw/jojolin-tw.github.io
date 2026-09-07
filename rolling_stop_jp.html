@@ -1,0 +1,1251 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>分頁 03｜停止標誌未停讓偵測——雲端影像演算法互動可視化</title>
+<style>
+  :root {
+    --bg: #0f172a; --card: #1e293b; --panel: #16233a; --line: #334155;
+    --text: #e2e8f0; --muted: #94a3b8;
+    --blue: #38bdf8; --green: #34d399; --warn: #fbbf24; --danger: #f87171;
+    --slow: #fbbf24;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  /* 流動縮放策略: 全頁尺寸皆以 rem 定義, 根字級隨視窗寬度連續縮放
+     (1920px 視窗 = 基準 16px, 4K ≈ 26px, 下限 15px)。
+     影片/曲線/版心因此等比縮放; 段落只設「行長上限」(em, 可讀性 45~75 字/行),
+     行長也會隨根字級等比變寬, 只是不會無限拉長。 */
+  html { scroll-behavior: smooth; font-size: clamp(15px, 0.52vw + 6px, 26px); }
+  body {
+    font-family: "Noto Sans TC", "Microsoft JhengHei", -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text);
+    line-height: 1.7; -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--blue); }
+  .mono { font-family: Consolas, "Cascadia Mono", monospace; }
+  .wrap { max-width: 88rem; margin: 0 auto; padding: 1.1rem 1.5rem 6rem; }
+
+  .topbar { display: flex; align-items: center; gap: .9rem; margin-bottom: 1.3rem; }
+  .back {
+    display: inline-flex; align-items: center; gap: .5rem;
+    color: var(--muted); text-decoration: none; font-size: .92rem;
+    border: 1px solid var(--line); border-radius: 999px; padding: .4rem 1rem;
+    transition: color .15s, border-color .15s;
+  }
+  .back:hover { color: var(--text); border-color: var(--muted); }
+  .page-tag {
+    font-size: .8rem; font-weight: 700; letter-spacing: 1.5px;
+    color: var(--blue); background: rgba(56,189,248,.12);
+    border-radius: 999px; padding: .3rem .9rem;
+  }
+  .flow-btn {
+    display: inline-flex; align-items: center; gap: .4rem;
+    background: none; color: var(--muted); font: inherit; font-size: .92rem;
+    border: 1px solid var(--line); border-radius: 999px; padding: .4rem 1rem; cursor: pointer;
+    transition: color .15s, border-color .15s;
+  }
+  .flow-btn:hover { color: var(--text); border-color: var(--muted); }
+  .flow-btn.open { color: var(--blue); border-color: rgba(56,189,248,.5); }
+  .flowpanel {
+    border: 1px solid var(--line); border-radius: 14px; background: var(--card);
+    padding: .9rem 1rem .3rem; margin-bottom: 1.3rem; overflow-x: auto;
+  }
+  .flowpanel svg { min-width: 1020px; width: 100%; display: block; }
+  .flowpanel .fp-note { color: var(--muted); font-size: .8rem; padding: .4rem .2rem .6rem; }
+
+  .hero { margin-bottom: 1.2rem; }
+  .hero h1 {
+    font-size: 1.8rem; font-weight: 800; letter-spacing: .5px; line-height: 1.35;
+    background: linear-gradient(90deg, var(--blue), var(--green));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero .sub { color: var(--muted); margin-top: .4rem; font-size: .95rem; }  /* 與下方關鍵字列同寬 */
+  .hero .sub b { color: var(--text); }
+  .hero-chips { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .8rem; }
+  .hchip { font-size: .78rem; font-weight: 700; padding: .22rem .75rem; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+  .hchip.m { color: var(--blue); border-color: rgba(56,189,248,.4); background: rgba(56,189,248,.07); }
+  .hchip.r { color: var(--green); border-color: rgba(52,211,153,.4); background: rgba(52,211,153,.07); }
+  .hchip[data-tip]:hover { filter: brightness(1.25); }
+
+  /* 懸浮提示: 單一 #tipbox 由 JS 定位 (position:fixed 不受任何 overflow 容器裁切;
+     夾住視窗左右緣、上方放不下自動翻下方) */
+  [data-tip] { cursor: help; }
+  #tipbox {
+    position: fixed; left: 0; top: 0; display: none; z-index: 999; pointer-events: none;
+    background: #0b1324; color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: .5rem .8rem;
+    font-size: .78rem; font-weight: 400; line-height: 1.55; text-align: left;
+    width: max-content; max-width: min(22rem, 92vw); white-space: normal;
+    box-shadow: 0 8px 24px rgba(0,0,0,.55);
+  }
+  #tipbox::after {
+    content: ""; position: absolute; top: 100%; left: var(--ax, 50%); margin-left: -.32rem;
+    border: .32rem solid transparent; border-top-color: var(--line);
+  }
+  #tipbox.below::after { top: auto; bottom: 100%;
+    border-top-color: transparent; border-bottom-color: var(--line); }
+
+  /* #thumb 模式: 只留影片區滿版, 供主頁截取「含演算法疊加繪製」的封面 */
+  body.thumbmode .wrap > :not(.theater) { display: none; }
+  body.thumbmode .theater > :not(.stage) { display: none; }
+  body.thumbmode .stage > :not(.videoWrap) { display: none; }
+  body.thumbmode .wrap { max-width: none; padding: 0; }
+  body.thumbmode .theater { display: block; margin: 0; gap: 0; }
+  body.thumbmode .videoWrap { border-radius: 0; border: none; }
+
+  /* ===== 第一屏 =====
+     左=影片+曲線 (自然流動, 不留空缺), 右欄=清單+判決說明 (縱跨兩列)。
+     sidebar 跨列是關鍵: 第一列高度只由影片決定, 曲線緊貼控制列下方,
+     不會因右欄較高而在影片下方擠出空白。 */
+  .theater {
+    display: grid; gap: 1.1rem; align-items: start;
+    grid-template-columns: minmax(0, 2.3fr) minmax(19rem, 1fr);
+    grid-template-areas: "video sidebar" "charts sidebar";
+    margin-bottom: 3.4rem;
+  }
+  .sidebar { grid-area: sidebar; display: flex; flex-direction: column; gap: 1.1rem; min-width: 0; }
+  .stage { grid-area: video; min-width: 0; }
+  .videoWrap {
+    position: relative; background: #000; border: 1px solid var(--line);
+    border-radius: 14px; overflow: hidden; aspect-ratio: 16/9;
+  }
+  .videoWrap video { position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; }
+  .videoWrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .hud { position: absolute; font-family: Consolas, monospace; font-weight: 700;
+    padding: .25rem .7rem; border-radius: 8px; font-size: .92rem;
+    background: rgba(10,15,28,.72); border: 1px solid rgba(148,163,184,.35);
+    backdrop-filter: blur(2px); }
+  .hud-state { top: .7rem; left: .7rem; }
+  .hud-state #hud-state { font-size: 1.25rem; font-weight: 800; letter-spacing: .5px; }
+  .hud-state .st-MOVING { color: var(--blue); }
+  .hud-state .st-SLOW { color: var(--slow); }
+  .hud-state .st-STOPPED { color: var(--danger); }
+  .hud-overlap { top: .7rem; right: .7rem; text-align: right; }
+  .hud-overlap .num { font-size: 1.25rem; }
+  .hud-overlap .num.pass { color: var(--green); }
+  .hud-overlap .lbl { color: var(--muted); font-size: .72rem; font-weight: 400; display: block; }
+  .hud-live { bottom: .7rem; left: .7rem; display: flex; align-items: center; gap: .45rem;
+    font-size: .78rem; color: var(--green); }
+  .hud-live .dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--green);
+    animation: livepulse 1.6s ease-in-out infinite; }
+  @keyframes livepulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+
+  /* 下滑凍結: 影片大半捲出視窗頂端後, 固定成右上角小窗續播 (pip 類由頁尾 JS 掛上) */
+  .videoWrap.pip {
+    position: fixed; bottom: .6rem; right: .6rem; width: min(54rem, 72vw);
+    z-index: 940; box-shadow: 0 14px 44px rgba(0,0,0,.65); cursor: grab;
+  }
+  .videoWrap.pip .hud { zoom: .85; }
+  @media (max-width: 760px) { .videoWrap.pip { width: 92vw; } }
+  /* pip 內的迷你時間軸: 疊在小窗底部, 不用捲回原位也能拖曳跳時間 */
+  /* 明確覆蓋 .videoWrap canvas 通則 (inset:0 / pointer-events:none), 否則
+     scrub 會貼到小窗頂端且不能拖 (急駕駛頁沒有該通則, 其他三頁有) */
+  .videoWrap.pip #scrub { position: absolute; left: 0; right: 0; bottom: 0;
+    top: auto; width: 100%; margin: 0; height: 1.35rem; z-index: 3;
+    pointer-events: auto; background: rgba(10,15,28,.55); }
+  /* 右滑收合: 小窗滑出右緣, 留一顆側邊按鈕; 展開不自動播放 */
+  .videoWrap.pip { transition: transform .25s; }
+  .videoWrap.pip.pipmin { transform: translateX(calc(100% + 1rem)); }
+  .pipTab {
+    position: fixed; right: 0; bottom: 3rem; z-index: 941; writing-mode: vertical-rl;
+    padding: .8rem .3rem; font: inherit; font-size: .85rem; letter-spacing: 3px;
+    color: var(--text); background: var(--card); border: 1px solid var(--line);
+    border-right: none; border-radius: 10px 0 0 10px; cursor: pointer;
+    box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  }
+  .pipTab:hover { color: var(--blue); border-color: var(--muted); }
+  /* 原位快照 (pip 時占位 div 內的凍結畫格) */
+  .pipGhost { position: relative; width: 100%; height: 100%; border-radius: 14px;
+    overflow: hidden; cursor: pointer; border: 1px dashed var(--line); }
+  .pipGhost canvas { width: 100%; height: 100%; display: block; opacity: .35; }
+  .pipGhost div { position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; color: var(--muted); font-size: .95rem; text-shadow: 0 1px 6px #000; }
+  .pipGhost:hover div { color: var(--text); }
+  /* pip 控制: 左上尺寸切換 (hover 浮現)、右上「右滑可隱藏」提示 (首次自動示 3 秒) */
+  /* 小窗上緣外側的小舌片: 左=尺寸切換鈕、右=右滑提示 (同款設計) */
+  .pipCtl, .pipHint { display: none; }
+  .pipCtl.on, .pipHint.on {
+    display: block; position: fixed; z-index: 941;
+    background: rgba(10,15,28,.85); border: 1px solid var(--line);
+    border-radius: 8px 8px 0 0; border-bottom: none; padding: .18rem .6rem;
+    font-size: .74rem;
+  }
+  .pipHint.on { color: var(--muted); pointer-events: none; }
+  .pipCtl.on { color: var(--text); font-family: inherit; cursor: pointer; }
+  .pipCtl.on:hover { color: var(--blue); border-color: var(--muted); }
+  /* 兩種尺寸: 標準 / 70% */
+  .videoWrap.pip.small { width: min(37.8rem, 50.4vw); }
+  .videoWrap.pip.small .hud { zoom: .7; }
+  @media (max-width: 760px) { .videoWrap.pip.small { width: 70vw; } }
+  .videoWrap.pip .hud-live { bottom: 1.75rem; }
+
+  /* 圖表置頂鈕 (📌): 點了把該圖移到最上, localStorage 跨案例/跨分頁記憶 */
+  .pinBtn { background: var(--panel); color: var(--muted); border: 1px solid var(--line);
+    border-radius: 6px; padding: 0 .5rem; margin-right: .5rem; cursor: pointer;
+    font-size: .72rem; line-height: 1.7; vertical-align: 2px; font-family: inherit; }
+  .pinBtn:hover { color: var(--text); border-color: var(--muted); }
+  .pinBtn.active { background: var(--blue); color: #0b1324; border-color: var(--blue); font-weight: 700; }
+
+  /* 影片正下方的迷你時間軸: 不用捲到曲線區就能拖曳 */
+  #scrub { width: 100%; height: 1.15rem; display: block; margin-top: .45rem;
+    cursor: ew-resize; touch-action: none; }
+
+  .controls { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-top: .3rem; }
+  .controls button {
+    background: var(--card); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: .28rem .8rem; cursor: pointer; font: inherit; font-size: .88rem;
+  }
+  .controls button:hover { border-color: var(--muted); }
+  .controls select { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: .2rem .3rem; font: inherit; font-size: .85rem; }
+  .controls .time { color: var(--muted); font-size: .82rem; min-width: 11.5rem; }
+  .controls .hint { color: var(--muted); font-size: .78rem; }
+  kbd { background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 0 .35rem; font-size: .75rem; }
+
+  /* 同步圖表 */
+  .charts { grid-area: charts; display: flex; flex-direction: column; gap: .6rem; min-width: 0; }
+  .chart { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: .55rem .7rem .3rem; }
+  .chart h4 { font-size: .8rem; color: var(--muted); font-weight: 700; margin-bottom: .15rem; }
+  .chart h4 b { color: var(--text); }
+  .chart canvas { width: 100%; display: block; cursor: ew-resize; touch-action: none; }
+
+  .verdict-panel {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; padding: 1rem 1.25rem;
+  }
+  .vp-top { display: flex; align-items: center; gap: .9rem; flex-wrap: wrap; }
+  .vp-badge { font-weight: 800; font-size: .95rem; padding: .2rem 1rem; border-radius: 999px; }
+  .vp-badge.violation { background: rgba(248,113,113,.16); color: var(--danger); border: 1px solid rgba(248,113,113,.5); }
+  .vp-badge.ok { background: rgba(52,211,153,.16); color: var(--green); border: 1px solid rgba(52,211,153,.5); }
+  .vp-stmt { font-weight: 800; font-size: 1.1rem; letter-spacing: .3px; }
+  .vp-title { font-weight: 700; margin-top: .6rem; }
+  .vp-desc { color: var(--muted); font-size: .92rem; margin-top: .3rem; }
+  .vp-meta { color: var(--muted); font-size: .84rem; margin-top: .6rem; }
+
+  .playlist { display: flex; flex-direction: column; gap: .75rem; min-width: 0; }
+  .pl-head { font-size: .82rem; font-weight: 700; letter-spacing: 1px; color: var(--muted); }
+  .pl-item {
+    display: grid; grid-template-columns: 7.25rem minmax(0, 1fr); gap: .75rem; align-items: center;
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: .6rem; cursor: pointer; text-align: left; color: inherit; font: inherit;
+    transition: border-color .15s, transform .15s;
+  }
+  .pl-item:hover { border-color: var(--muted); transform: translateY(-1px); }
+  .pl-item.active { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue) inset; }
+  .pl-item img { width: 7.25rem; border-radius: 8px; display: block; background: #000; }
+  .pl-info { min-width: 0; }
+  .pl-sec { font-weight: 800; font-size: .95rem; }
+  .pl-sec .u { color: var(--muted); font-weight: 400; font-size: .8rem; }
+  .pl-badge { font-size: .72rem; font-weight: 800; padding: 1px .55rem; border-radius: 999px; margin-left: .5rem; vertical-align: 1px; white-space: nowrap; display: inline-block; }
+  .pl-badge.violation { background: rgba(248,113,113,.16); color: var(--danger); }
+  .pl-badge.ok { background: rgba(52,211,153,.16); color: var(--green); }
+  .pl-title { color: var(--muted); font-size: .82rem; margin-top: .15rem;
+    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+  /* ===== 說明區 ===== */
+  section.block { margin-bottom: 3.4rem; }
+  section.block > h2 { font-size: 1.35rem; font-weight: 800; margin-bottom: .3rem; }
+  section.block > .lead { color: var(--muted); margin-bottom: 1.1rem; max-width: 56em; }
+  section.block > .lead b { color: var(--text); }
+
+  .pipeline { display: flex; align-items: stretch; }
+  .pnode {
+    flex: 1; background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: .9rem 1.1rem; min-width: 0;
+  }
+  .pnode .pn-step { font-size: .72rem; font-weight: 800; letter-spacing: 1.2px; margin-bottom: .3rem; }
+  .pnode.edge .pn-step { color: var(--blue); }
+  .pnode.cloud .pn-step { color: var(--green); }
+  .pnode.final .pn-step { color: var(--warn); }
+  .pnode .pn-title { font-weight: 800; font-size: .98rem; }
+  .pnode .pn-sub { color: var(--muted); font-size: .84rem; margin-top: .3rem; }
+  .pnode .pn-sub b { color: var(--text); }
+  .parrow { display: flex; align-items: center; padding: 0 .45rem; color: var(--muted); }
+  .parrow::before { content: "→"; font-size: 1.25rem; }
+
+  .keynote {
+    border: 1px solid var(--warn); border-radius: 14px; margin-top: 1rem;
+    background: linear-gradient(135deg, rgba(251,191,36,.1), rgba(251,191,36,.02));
+    padding: 1rem 1.3rem;
+  }
+  .keynote p { font-size: .93rem; }
+  .keynote p b { color: var(--warn); }
+  code { background: rgba(15,23,42,.8); padding: 1px .45rem; border-radius: 5px;
+    font-family: Consolas, monospace; font-size: .88em; color: var(--warn); }
+
+  .algo-list { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+  .algo-item {
+    display: grid; grid-template-columns: 10.5rem minmax(0, 1fr); gap: .8rem; align-items: baseline;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: .7rem 1rem;
+  }
+  .ai-term { font-weight: 800; font-size: .9rem; color: var(--blue); }
+  .ai-desc { color: var(--muted); font-size: .88rem; }
+  .param {
+    border-radius: 12px; padding: .9rem 1.2rem; margin-top: .8rem;
+    border-left: 4px solid var(--green); background: rgba(52,211,153,.07);
+    font-size: .92rem;
+  }
+  .param b { color: var(--text); }
+  .param .ph { font-weight: 800; }
+  .param .pd { color: var(--muted); margin-top: .15rem; }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: .9rem; margin-bottom: 1.1rem; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: .95rem 1.25rem; }
+  .stat .sv { font-size: 1.9rem; font-weight: 800; color: var(--green); line-height: 1.2; }
+  .stat .sv span { font-size: .95rem; color: var(--muted); font-weight: 400; margin-left: 2px; }
+  .stat .sk { font-size: .84rem; color: var(--muted); margin-top: .25rem; }
+  .vtable-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+  .vtable-wrap table { width: 100%; border-collapse: collapse; font-size: .9rem; min-width: 40rem; }
+  .vtable-wrap th, .vtable-wrap td { padding: .6rem .9rem; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  .vtable-wrap th:first-child, .vtable-wrap td:first-child { text-align: left; }
+  .vtable-wrap th { color: var(--muted); font-weight: 700; font-size: .82rem; }
+  .vtable-wrap tr:last-child td { border-bottom: none; }
+  .vtable-wrap td.hl { color: var(--green); font-weight: 800; }
+  .tfoot-note { color: var(--muted); font-size: .82rem; margin-top: .6rem; }
+  .body-note { margin-top: 1.1rem; font-size: .94rem; max-width: 56em; }
+  .body-note b { color: var(--warn); }
+
+  footer { border-top: 1px solid var(--line); padding-top: 1.2rem; color: var(--muted); font-size: .84rem; }
+
+  @media (max-width: 760px) {
+    .wrap { padding: .8rem .9rem 4rem; }
+    .hero h1 { font-size: 1.32rem; }
+    .hero .sub { font-size: .9rem; }
+    .hchip.m { display: none; }
+    .theater {
+      grid-template-columns: 1fr;
+      grid-template-areas: "video" "sidebar" "charts";
+      gap: .8rem;
+    }
+    .sidebar { gap: .8rem; }
+    .playlist { flex-direction: row; overflow-x: auto; padding-bottom: .3rem; }
+    .pl-head { display: none; }
+    .pl-item { flex: 0 0 15.5rem; grid-template-columns: 5.2rem minmax(0, 1fr); padding: .5rem; }
+    .pl-item img { width: 5.2rem; }
+    .pl-title { -webkit-line-clamp: 3; font-size: .78rem; }
+    .hud { font-size: .78rem; padding: .18rem .5rem; }
+    .hud-overlap .num { font-size: 1rem; }
+    .hud-overlap .lbl { display: none; }   /* 手機空間不足, 只留數字 */
+    .controls .hint { display: none; }
+    .pipeline { flex-direction: column; }
+    .parrow { justify-content: center; padding: .15rem 0; }
+    .parrow::before { content: "↓"; }
+    .algo-list { grid-template-columns: 1fr; }
+    .algo-item { grid-template-columns: 1fr; gap: .1rem; }
+    .stats { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <a class="back" href="index.html">← 返回主頁</a>
+    <span class="page-tag">分頁 03</span>
+    <button id="btnFlow" class="flow-btn" type="button">系統流程圖 ▾</button>
+  </div>
+
+  <div id="flowPanel" class="flowpanel" hidden>
+    <svg viewBox="0 0 1180 590" xmlns="http://www.w3.org/2000/svg" font-family="'Noto Sans TC','Microsoft JhengHei',sans-serif">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0L10 5L0 10z" fill="#94a3b8"/>
+        </marker>
+      </defs>
+
+      <!-- 泳道 -->
+      <rect x="20" y="36" width="1140" height="150" rx="12" fill="rgba(56,189,248,.05)" stroke="#334155"/>
+      <text x="36" y="60" fill="#38bdf8" font-size="12.5" font-weight="800" letter-spacing="1.5">階段一・車機端（邊緣運算・4 FPS）</text>
+      <rect x="20" y="210" width="1140" height="350" rx="12" fill="rgba(52,211,153,.05)" stroke="#334155"/>
+      <text x="36" y="236" fill="#34d399" font-size="12.5" font-weight="800" letter-spacing="1.5">階段二・雲端重審（AWS Lambda・24 FPS・本案開發）</text>
+
+      <!-- 車機端 -->
+      <rect x="40" y="74" width="170" height="34" rx="7" fill="#0f172a" stroke="#334155"/>
+      <text x="125" y="96" fill="#e2e8f0" font-size="12" text-anchor="middle">行車記錄器影像 4 FPS</text>
+      <rect x="40" y="116" width="170" height="34" rx="7" fill="#0f172a" stroke="#334155"/>
+      <text x="125" y="138" fill="#e2e8f0" font-size="12" text-anchor="middle">GPS 速度</text>
+      <rect x="260" y="74" width="240" height="76" rx="8" fill="#0f172a" stroke="#334155"/>
+      <text x="380" y="105" fill="#e2e8f0" font-size="12.5" font-weight="700" text-anchor="middle">車機端初判</text>
+      <text x="380" y="124" fill="#94a3b8" font-size="10.5" text-anchor="middle">slowSpeed 門檻＋影像 motion</text>
+      <rect x="560" y="74" width="280" height="76" rx="8" fill="#0f172a" stroke="#334155"/>
+      <text x="700" y="105" fill="#e2e8f0" font-size="12.5" font-weight="700" text-anchor="middle">事件＋影片上傳雲端</text>
+      <text x="700" y="124" fill="#94a3b8" font-size="10.5" text-anchor="middle">附停止標誌偵測紀錄</text>
+      <rect x="880" y="74" width="260" height="76" rx="8" fill="none" stroke="#94a3b8" stroke-dasharray="5 4"/>
+      <text x="1010" y="105" fill="#94a3b8" font-size="12.5" font-weight="700" text-anchor="middle">就地結案（不上傳）</text>
+      <text x="1010" y="124" fill="#94a3b8" font-size="10.5" text-anchor="middle">有停讓或未達違規條件</text>
+
+      <path d="M210 91 L256 91" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+      <path d="M210 133 L256 133" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+      <path d="M500 100 L556 100" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+      <text x="528" y="92" fill="#94a3b8" font-size="10" text-anchor="middle">違規候選</text>
+      <path d="M380 150 L380 168 L1010 168 L1010 154" stroke="#94a3b8" stroke-width="1.4" fill="none" stroke-dasharray="5 4" marker-end="url(#arr)"/>
+
+      <!-- 上傳 → 雲端 -->
+      <path d="M700 150 L700 198 L95 198 L95 246" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+      <path d="M95 198 L30 198 L30 388 L36 388" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+
+      <!-- 雲端 row1: motion 管線 -->
+      <rect x="40" y="250" width="180" height="64" rx="8" fill="#0f172a" stroke="#334155"/>
+      <text x="130" y="277" fill="#e2e8f0" font-size="12.5" font-weight="700" text-anchor="middle">逐幀解碼</text>
+      <text x="130" y="296" fill="#94a3b8" font-size="10.5" text-anchor="middle">24 FPS 全幀、不抽幀</text>
+      <rect x="240" y="250" width="230" height="64" rx="8" fill="#0f172a" stroke="#334155"/>
+      <text x="355" y="277" fill="#e2e8f0" font-size="12.5" font-weight="700" text-anchor="middle">Phase Correlation</text>
+      <text x="355" y="296" fill="#94a3b8" font-size="10.5" text-anchor="middle">4×4 網格 → 前進量・轉彎量</text>
+      <rect x="490" y="250" width="180" height="64" rx="8" fill="#0f172a" stroke="#334155"/>
+      <text x="580" y="277" fill="#e2e8f0" font-size="12.5" font-weight="700" text-anchor="middle">Sigma-clip＋SNR 閘</text>
+      <text x="580" y="296" fill="#94a3b8" font-size="10.5" text-anchor="middle">低信心幀不採用</text>
+      <rect x="690" y="250" width="230" height="64" rx="8" fill="#0f172a" stroke="#334155"/>
+      <text x="805" y="277" fill="#e2e8f0" font-size="12.5" font-weight="700" text-anchor="middle">三態運動狀態機</text>
+      <text x="805" y="296" fill="#94a3b8" font-size="10.5" text-anchor="middle">多幀確認・轉彎抑制</text>
+      <rect x="940" y="250" width="200" height="64" rx="8" fill="#0f172a" stroke="#f87171"/>
+      <text x="1040" y="277" fill="#f87171" font-size="12.5" font-weight="700" text-anchor="middle">STOPPED 靜止區間</text>
+      <text x="1040" y="296" fill="#94a3b8" font-size="10.5" text-anchor="middle">＝時間軸上的紅段</text>
+
+      <path d="M220 282 L236 282" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+      <path d="M470 282 L486 282" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+      <path d="M670 282 L686 282" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+      <path d="M920 282 L936 282" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+
+      <!-- 雲端 row2: 觀察窗 -->
+      <rect x="40" y="360" width="250" height="56" rx="8" fill="#0f172a" stroke="#334155"/>
+      <text x="165" y="383" fill="#e2e8f0" font-size="12.5" font-weight="700" text-anchor="middle">停止標誌偵測紀錄</text>
+      <text x="165" y="402" fill="#94a3b8" font-size="10.5" text-anchor="middle">FLOOR 標線（綠）・POLE 立牌（藍）</text>
+      <rect x="330" y="360" width="250" height="56" rx="8" fill="#0f172a" stroke="#fbbf24"/>
+      <text x="455" y="383" fill="#fbbf24" font-size="12.5" font-weight="700" text-anchor="middle">判決觀察窗 bracket</text>
+      <text x="455" y="402" fill="#94a3b8" font-size="10.5" text-anchor="middle">標誌離開畫面後末端延伸 5 秒</text>
+      <path d="M290 388 L326 388" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+
+      <!-- 雲端 row3: 判決 -->
+      <rect x="620" y="450" width="250" height="64" rx="8" fill="#0f172a" stroke="#334155"/>
+      <text x="745" y="477" fill="#e2e8f0" font-size="12.5" font-weight="700" text-anchor="middle">累積停等 overlap</text>
+      <text x="745" y="496" fill="#94a3b8" font-size="10.5" text-anchor="middle">＝ STOPPED ∩ 觀察窗</text>
+      <rect x="910" y="450" width="120" height="64" rx="8" fill="#0f172a" stroke="#fbbf24"/>
+      <text x="970" y="477" fill="#fbbf24" font-size="12.5" font-weight="700" text-anchor="middle">＞ 0.5 秒？</text>
+      <text x="970" y="496" fill="#94a3b8" font-size="10.5" text-anchor="middle">判決門檻</text>
+      <rect x="1050" y="434" width="110" height="44" rx="8" fill="rgba(52,211,153,.1)" stroke="#34d399"/>
+      <text x="1105" y="452" fill="#34d399" font-size="12" font-weight="700" text-anchor="middle">有停讓</text>
+      <text x="1105" y="468" fill="#94a3b8" font-size="9.5" text-anchor="middle">過濾誤報</text>
+      <rect x="1050" y="494" width="110" height="44" rx="8" fill="rgba(248,113,113,.1)" stroke="#f87171"/>
+      <text x="1105" y="512" fill="#f87171" font-size="12" font-weight="700" text-anchor="middle">違規成立</text>
+      <text x="1105" y="528" fill="#94a3b8" font-size="9.5" text-anchor="middle">回報車隊管理者</text>
+
+      <path d="M1040 314 L1040 410 L790 410 L790 446" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+      <path d="M580 388 L700 388 L700 446" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+      <path d="M870 482 L906 482" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+      <path d="M1030 468 L1048 458" stroke="#34d399" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+      <text x="1034" y="450" fill="#34d399" font-size="10.5" font-weight="700">是</text>
+      <path d="M1030 496 L1048 508" stroke="#f87171" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+      <text x="1034" y="524" fill="#f87171" font-size="10.5" font-weight="700">否</text>
+    </svg>
+    <div class="fp-note">與下方互動區的對應：時間軸紅段＝STOPPED 靜止區間、綠／藍段＝標誌偵測紀錄、黃框＝判決觀察窗、綠色曲線＝累積停等 overlap。</div>
+  </div>
+
+  <header class="hero">
+    <h1>停止標誌未停讓偵測：從影像判讀車輛行進或靜止</h1>
+    <p class="sub">日本法規要求車輛在「止まれ」停止標誌前完全靜止，滑行未停（rolling stop）即屬違規。
+    系統以 <b>Phase Correlation（相位相關）</b>逐幀判讀畫面中的車輛是行進還是靜止，
+    直接量出在標誌前真正靜止了幾秒——全程不依賴 GPS。
+    下方是<b>可互動的演算法重現</b>：影片、偵測框、逐幀數據即時同步。</p>
+    <div class="hero-chips">
+      <span class="hchip m" data-tip="將相鄰影格轉到頻率域解相位差，直接量出畫面平移量——亞像素精度，對光影變化魯棒">Phase Correlation 位移量測</span>
+      <span class="hchip m" data-tip="雲端全幀分析、不抽幀；時間解析度是車機端（4 FPS）的 6 倍，每幀 0.042 秒">24 FPS 逐幀分析</span>
+      <span class="hchip m" data-tip="畫面切 16 區各自量位移，聚合成「前進量 radial」與「轉彎量 dx」兩路訊號">4×4 網格位移場</span>
+      <span class="hchip m" data-tip="逐幀 2σ 離群排除＋信噪比（SNR）信心閘：低信心的幀不更新判斷，抗雨刷、反光等干擾">Sigma-clip ＋ SNR 信心過濾</span>
+      <span class="hchip m" data-tip="MOVING（移動）／SLOW（慢速）／STOPPED（靜止）三態；進出 STOPPED 需連續 4 幀確認，對行人走動等畫面干擾免疫；轉彎時禁判 STOPPED">三態運動狀態機</span>
+      <span class="hchip m" data-tip="地面標線＋桿上立牌雙路偵測構成「應停車的觀察窗」，靜止秒數只在窗內累計——等紅燈、塞車不會被誤算成停讓">停止標誌觀察窗</span>
+      <span class="hchip m" data-tip="事件觸發自動重審；判決門檻做成環境變數，線上調整數秒生效、不需重新部署">AWS Lambda 無伺服器部署</span>
+      <span class="hchip r" data-tip="演算法判「違規」時，實際真的違規的比例＝TP/(TP＋FP)＝20/21（第二輪上線實測 78 筆）">Precision 95.2%</span>
+      <span class="hchip r" data-tip="所有真實違規中被演算法抓到的比例＝TP/(TP＋FN)＝20/23（第二輪上線實測 78 筆）">Recall 87.0%</span>
+      <span class="hchip r" data-tip="兩輪人工逐筆標記的真實事件實測：開發期 32 筆＋上線後 78 筆，詳見頁尾驗證章節">110 筆真實事件驗證</span>
+    </div>
+  </header>
+
+  <!-- ===== 第一屏 ===== -->
+  <div class="theater">
+    <div class="stage">
+      <div class="videoWrap">
+        <video id="main-video" muted playsinline loop autoplay preload="auto"></video>
+        <canvas id="overlay"></canvas>
+        <div class="hud hud-state" data-tip="三態運動狀態機（MOVING 移動／SLOW 慢速／STOPPED 靜止）的即時輸出；進出 STOPPED 需連續 4 幀確認，轉彎時禁判 STOPPED">狀態 <span id="hud-state" class="st-MOVING">MOVING</span></div>
+        <div class="hud hud-overlap" data-tip="演算法的判決依據：只在停止標誌觀察窗內累計的靜止秒數，超過 0.5 秒門檻即判有停讓">
+          <span id="hud-overlap" class="num">0.000 s</span>
+          <span class="lbl">觀察窗內累積停等（門檻 0.5 s）</span>
+        </div>
+        <div class="hud hud-live" data-tip="畫面上的框線、數據與下方曲線都由網頁以演算法逐幀輸出即時繪製，與影片同步——可逐幀驗證，不是烤好的字幕"><span class="dot"></span>雲端演算法重現・24 FPS</div>
+      </div>
+      <canvas id="scrub"></canvas>
+      <div class="controls">
+        <button id="btnPlay">⏸ 暫停</button>
+        <button id="btnMute">🔇 聲音</button>
+        <button id="btnPrev">◀ 上一幀</button>
+        <button id="btnNext">下一幀 ▶</button>
+        <label style="color:var(--muted);font-size:.85rem">速度
+          <select id="rate"><option>0.25</option><option>0.5</option><option selected>1</option><option>2</option></select>
+        </label>
+        <span class="time mono" id="timeLabel">--</span>
+        <span class="hint"><kbd>空白</kbd> 播放｜<kbd>←</kbd><kbd>→</kbd> 逐幀｜圖表可點擊、拖曳跳轉</span>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="playlist">
+        <div class="pl-head">判決範例（點選切換）</div>
+      <button class="pl-item" type="button">
+        <img src="assets/videos/rolling_stop_jp/case1.jpg" alt="範例1 縮圖" loading="lazy">
+        <span class="pl-info">
+          <span class="pl-sec">3.281<span class="u"> 秒</span><span class="pl-badge ok">有停讓</span></span>
+          <span class="pl-title">禮讓整群行人的完全停止——3.28 秒</span>
+        </span>
+      </button>
+      <button class="pl-item" type="button">
+        <img src="assets/videos/rolling_stop_jp/case2.jpg" alt="範例2 縮圖" loading="lazy">
+        <span class="pl-info">
+          <span class="pl-sec">0.000<span class="u"> 秒</span><span class="pl-badge violation">違規</span></span>
+          <span class="pl-title">全程未減速直接通過——0.00 秒</span>
+        </span>
+      </button>
+      <button class="pl-item" type="button">
+        <img src="assets/videos/rolling_stop_jp/case3.jpg" alt="範例3 縮圖" loading="lazy">
+        <span class="pl-info">
+          <span class="pl-sec">0.292<span class="u"> 秒</span><span class="pl-badge violation">違規</span></span>
+          <span class="pl-title">只點了一下剎車——0.292 秒，不夠</span>
+        </span>
+      </button>
+      </div>
+      <div class="verdict-panel">
+        <div class="vp-top" data-tip="判決規則：觀察窗內累積靜止秒數「大於」0.5 秒 → 有停讓；等於或小於 → 違規">
+          <span id="vp-badge" class="vp-badge"></span>
+          <span id="vp-stmt" class="vp-stmt"></span>
+        </div>
+        <div id="vp-title" class="vp-title"></div>
+        <p id="vp-desc" class="vp-desc"></p>
+        <div id="vp-meta" class="vp-meta"></div>
+      </div>
+    </div>
+
+    <div class="charts">
+      <div class="chart">
+        <h4><b>時間軸</b>　MOTION 列：紅＝靜止 STOPPED・橘＝慢速 SLOW｜綠＝地面標誌可見窗（FLOOR）・藍＝立牌可見窗（POLE）｜黃框＝判決觀察窗（標誌離開後延伸 5 秒）</h4>
+        <canvas id="chartTimeline" height="92"></canvas>
+      </div>
+      <div class="chart">
+        <h4><b>前進量 radial</b>　Phase Correlation 解出的每幀位移（px/frame）；低於 0.25 進入靜止候選、高於 0.55 判定移動</h4>
+        <canvas id="chartRadial" height="170"></canvas>
+      </div>
+      <div class="chart">
+        <h4><b>累積停等秒數</b>　只在觀察窗內累計；曲線跨過 0.5 秒門檻 ⇒ 有停讓，否則違規</h4>
+        <canvas id="chartOverlap" height="150"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 說明區 ===== -->
+  <section class="block">
+    <h2>解法：兩階段偵測管線</h2>
+    <p class="lead">要抓的是「減速滑行、沒真的停」。難點在<b>車速 1～2 m/s 時 GPS 誤差與車速同量級</b>，
+    車上算力又只有 4 FPS——所以明顯違規在車上當場攔下，曖昧的上雲，用 6 倍時間解析度重審。</p>
+    <div class="pipeline">
+      <div class="pnode edge">
+        <div class="pn-step">階段一・車機端</div>
+        <div class="pn-title">就地初判</div>
+        <div class="pn-sub">4 FPS・GPS＋影像 motion，攔下<b>明顯違規</b></div>
+      </div>
+      <div class="parrow"></div>
+      <div class="pnode edge">
+        <div class="pn-step">上傳</div>
+        <div class="pn-title">事件影片上雲</div>
+        <div class="pn-sub">判定違規才連同影片上傳，<b>灰色地帶可全數放行上雲</b></div>
+      </div>
+      <div class="parrow"></div>
+      <div class="pnode cloud">
+        <div class="pn-step">階段二・雲端（本案開發）</div>
+        <div class="pn-title">24 FPS 重審</div>
+        <div class="pn-sub">Phase Correlation 位移分析，<b>不依賴 GPS</b></div>
+      </div>
+      <div class="parrow"></div>
+      <div class="pnode final">
+        <div class="pn-step">判決</div>
+        <div class="pn-title">靜止秒數 vs 門檻</div>
+        <div class="pn-sub">觀察窗內累積靜止 <b>＞ 0.5 秒</b> → 有停讓，否則違規</div>
+      </div>
+    </div>
+    <div class="keynote">
+      <p><b>嚴格程度是營運參數，不是寫死的</b>：車機端門檻 <code>slowSpeed</code> 決定多曖昧的事件要上雲
+      （守規車隊設 0，裁決全交雲端）；雲端門檻決定要停多久才算停。
+      偵測的「事實」由演算法產生，「要抓多嚴」由營運配置。</p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>雲端演算法核心</h2>
+    <p class="lead">六個關鍵設計，全部圍繞同一件事：把「靜止」量準。</p>
+    <div class="algo-list">
+      <div class="algo-item"><span class="ai-term">Phase Correlation</span>
+        <span class="ai-desc">相鄰影格轉頻率域解相位差，亞像素級量出畫面平移</span></div>
+      <div class="algo-item"><span class="ai-term">4×4 網格位移場</span>
+        <span class="ai-desc">16 區位移向量，投影成「前進量」與「轉彎量」兩路訊號</span></div>
+      <div class="algo-item"><span class="ai-term">Sigma-clip＋SNR 閘</span>
+        <span class="ai-desc">逐幀 2σ 去離群，信心不足的幀不進判斷</span></div>
+      <div class="algo-item"><span class="ai-term">三態運動狀態機</span>
+        <span class="ai-desc">MOVING／SLOW／STOPPED，進出需多幀確認，對行人晃動免疫</span></div>
+      <div class="algo-item"><span class="ai-term">轉彎感知</span>
+        <span class="ai-desc">轉彎時前進訊號天生被壓小，此時禁判 STOPPED 防誤判</span></div>
+      <div class="algo-item"><span class="ai-term">雙路觀察窗</span>
+        <span class="ai-desc">地面標線＋桿上立牌，靜止秒數只在窗內累計，等紅燈不誤算</span></div>
+    </div>
+    <div class="param">
+      <div class="ph">決策參數：停等秒數門檻（目前 <code>0.5 秒</code>）</div>
+      <div class="pd">調高＝要求停更久、抓更嚴；調低＝較寬鬆。<b>所有判決都附秒數，可逐幀覆核。</b></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>驗證：真實事件人工標記、兩輪實測</h2>
+    <p class="lead">資料全部來自客戶車隊實際回報的未停讓事件，逐筆<b>人工重新標記</b>作 ground truth。
+    第一輪在開發期驗證可行性，第二輪在上線後追蹤三週的線上表現。</p>
+
+    <div class="stats">
+      <div class="stat" data-tip="第一輪：2026/04/25–30 共 32 筆（開發期驗證）；第二輪：2026/05/18–06/08 共 78 筆（上線後追蹤）。每筆皆由人工看影片重新標記真值"><div class="sv">110<span>筆</span></div><div class="sk">人工標記的真實事件（32 ＋ 78）</div></div>
+      <div class="stat" data-tip="第二輪實測：TP=20、FP=1 → Precision＝20/21＝95.2%。誤殺率極低，客戶收到的違規幾乎都是真的"><div class="sv">95.2<span>%</span></div><div class="sk">Precision——判「違規」時真的違規的比例</div></div>
+      <div class="stat" data-tip="第二輪實測：TP=20、FN=3 → Recall＝20/23＝87.0%。23 筆真實違規只漏 3 筆"><div class="sv">87.0<span>%</span></div><div class="sk">Recall——真實違規被抓到的比例</div></div>
+    </div>
+
+    <div class="vtable-wrap">
+      <table>
+        <thead>
+          <tr><th>測試輪次</th><th>事件數</th><th>TP</th><th>FP</th><th>TN</th><th>FN</th><th>Precision</th><th>Recall</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>第一輪・開發期驗證（2026/04/25–04/30）</td><td>32</td><td>20</td><td>1</td><td>7</td><td>4</td><td class="hl">95.2%</td><td class="hl">83.3%</td></tr>
+          <tr><td>第二輪・上線後追蹤（2026/05/18–06/08）</td><td>78</td><td>20</td><td>1</td><td>53</td><td>3</td><td class="hl">95.2%</td><td class="hl">87.0%</td></tr>
+          <tr><td>　├ 客戶A（物流車隊）</td><td>62</td><td>6</td><td>1</td><td>52</td><td>2</td><td>85.7%</td><td>75.0%</td></tr>
+          <tr><td>　└ 客戶B（計程車隊）</td><td>16</td><td>14</td><td>0</td><td>1</td><td>1</td><td>100%</td><td>93.3%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="tfoot-note">正類（positive）＝「未停讓、違規」。人工標記標準：完全停下 ＝ 畫面靜止至少 1.0 秒。
+    TP＝正確抓到違規、FP＝把有停誤判成違規、TN＝正確過濾車機誤報、FN＝漏掉的違規。</p>
+
+    <p class="body-note">第二輪最能說明價值：78 筆車機上報的「違規」中，其實有 <b>54 筆是誤報</b>。
+    雲端重審<b>正確攔下 53 筆（98%）</b>、只誤殺 1 筆，同時 23 筆真實違規抓回 20 筆——
+    客戶看到的違規清單乾淨了一個數量級，真實違規幾乎沒有流失。</p>
+  </section>
+
+  <footer>
+    本頁影片皆為實際道路事件；框線與數據為演算法重現輸出，由網頁即時繪製。客戶名稱與車輛資訊已匿名化處理。
+  </footer>
+
+</div>
+
+<script>
+"use strict";
+const CASES = [{"src": "assets/videos/rolling_stop_jp/case1.mp4?v=1788497992", "poster": "assets/videos/rolling_stop_jp/case1.jpg", "verdict": "有停讓", "cls": "ok", "stmt": "累積靜止 3.281 秒 ＞ 門檻 0.5 秒", "title": "禮讓整群行人的完全停止——3.28 秒", "desc": "車輛在斑馬線前停穩，讓一整群行人通過，演算法量出連續 3.281 秒的靜止。這同時是「車機端誤報」的典型案例——明明有停卻被低幀率初判上報成違規，由雲端重審正確救回。第二輪實測 78 筆中有 54 筆是這類誤報，雲端攔下了 53 筆。", "meta": "客戶B・車號尾碼 101・2026-05-14 14:08 (JST)", "frames": [[0.0, 0, 0.0], [0.042, 0, 3.03], [0.083, 0, 3.06], [0.125, 0, 3.03], [0.167, 0, 3.02], [0.208, 0, 3.03], [0.25, 0, 3.01], [0.292, 0, 3.01], [0.333, 0, 3.95], [0.375, 0, 3.95], [0.417, 0, 3.02], [0.458, 0, 3.02], [0.5, 0, 2.51], [0.542, 0, 2.51], [0.583, 0, 2.84], [0.625, 0, 2.84], [0.667, 0, 3.27], [0.708, 0, 3.33], [0.75, 0, 3.27], [0.792, 0, 3.27], [0.833, 0, 3.3], [0.875, 0, 3.13], [0.917, 0, 3.13], [0.958, 0, 3.09], [1.0, 0, 3.09], [1.042, 0, 3.09], [1.083, 0, 3.3], [1.125, 0, 4.24], [1.167, 0, 4.24], [1.208, 0, 4.87], [1.25, 0, 4.24], [1.292, 0, 4.24], [1.333, 0, 4.38], [1.375, 0, 4.38], [1.417, 0, 3.67], [1.458, 0, 4.38], [1.5, 0, 4.38], [1.542, 0, 6.89], [1.583, 0, 3.67], [1.625, 0, 4.79], [1.667, 0, 5.47], [1.708, 0, 5.14], [1.75, 0, 4.79], [1.792, 0, 4.79], [1.833, 0, 4.6], [1.875, 0, 4.57], [1.917, 0, 4.57], [1.958, 0, 4.5], [2.0, 0, 4.08], [2.042, 0, 4.34], [2.083, 0, 4.08], [2.125, 0, 4.08], [2.167, 0, 4.08], [2.208, 0, 4.05], [2.25, 0, 4.05], [2.292, 0, 4.26], [2.333, 0, 4.48], [2.375, 0, 4.4], [2.417, 0, 4.48], [2.458, 0, 4.4], [2.5, 0, 4.4], [2.542, 0, 4.4], [2.583, 0, 5.26], [2.625, 0, 5.26], [2.667, 0, 5.26], [2.708, 0, 5.26], [2.75, 0, 5.26], [2.792, 0, 3.49], [2.833, 0, 3.49], [2.875, 0, 3.49], [2.917, 0, 3.7], [2.958, 0, 3.7], [3.0, 0, 4.68], [3.042, 0, 4.68], [3.083, 0, 3.66], [3.125, 0, 3.66], [3.167, 0, 2.8], [3.208, 0, 3.66], [3.25, 0, 2.92], [3.292, 0, 2.92], [3.333, 0, 4.0], [3.375, 0, 4.0], [3.417, 0, 2.97], [3.458, 0, 2.97], [3.5, 0, 2.65], [3.542, 0, 2.41], [3.583, 0, 2.41], [3.625, 0, 2.41], [3.667, 0, 3.05], [3.708, 0, 3.27], [3.75, 0, 3.27], [3.792, 0, 3.27], [3.833, 0, 3.03], [3.875, 0, 1.95], [3.917, 0, 1.95], [3.958, 0, 1.95], [4.0, 0, 1.95], [4.042, 0, 1.51], [4.083, 0, 1.51], [4.125, 0, 1.71], [4.167, 0, 2.47], [4.208, 0, 2.47], [4.25, 0, 3.4], [4.292, 0, 3.41], [4.333, 0, 3.48], [4.375, 0, 3.48], [4.417, 0, 3.63], [4.458, 0, 3.63], [4.5, 0, 4.18], [4.541, 0, 4.18], [4.583, 0, 4.18], [4.625, 0, 3.5], [4.666, 0, 4.18], [4.708, 0, 3.5], [4.75, 0, 3.5], [4.791, 0, 2.87], [4.833, 0, 2.87], [4.875, 0, 2.26], [4.916, 0, 1.97], [4.958, 0, 1.97], [5.0, 0, 1.97], [5.041, 0, 4.04], [5.083, 0, 2.25], [5.125, 0, 2.56], [5.166, 0, 2.92], [5.208, 0, 2.92], [5.25, 0, 2.92], [5.291, 0, 4.09], [5.333, 0, 4.31], [5.375, 0, 4.43], [5.416, 0, 4.48], [5.458, 0, 4.48], [5.5, 0, 4.48], [5.541, 0, 3.98], [5.583, 0, 3.91], [5.625, 0, 3.91], [5.666, 0, 3.91], [5.708, 0, 4.41], [5.75, 0, 4.41], [5.791, 0, 4.41], [5.833, 0, 3.81], [5.875, 0, 3.52], [5.916, 0, 3.52], [5.958, 0, 3.52], [6.0, 0, 3.52], [6.041, 0, 3.52], [6.083, 0, 3.52], [6.125, 0, 3.69], [6.166, 0, 3.69], [6.208, 0, 3.5], [6.25, 0, 2.99], [6.291, 0, 3.5], [6.333, 0, 2.99], [6.375, 0, 2.37], [6.416, 0, 2.42], [6.458, 0, 2.19], [6.5, 0, 2.19], [6.541, 0, 2.18], [6.583, 0, 2.18], [6.625, 0, 2.02], [6.666, 0, 2.02], [6.708, 0, 1.81], [6.75, 0, 1.44], [6.791, 0, 1.43], [6.833, 0, 1.43], [6.875, 0, 1.35], [6.916, 0, 1.06], [6.958, 0, 1.06], [7.0, 0, 1.06], [7.041, 0, 1.05], [7.083, 0, 1.06], [7.125, 0, 1.17], [7.166, 0, 1.06], [7.208, 0, 1.17], [7.25, 0, 1.17], [7.291, 0, 1.04], [7.333, 0, 1.04], [7.375, 0, 1.04], [7.416, 0, 0.95], [7.458, 0, 0.7], [7.5, 0, 0.95], [7.541, 0, 0.86], [7.583, 0, 0.86], [7.625, 0, 0.8], [7.666, 0, 0.86], [7.708, 0, 0.8], [7.75, 0, 0.8], [7.791, 0, 0.75], [7.833, 0, 0.31], [7.875, 0, 0.26], [7.916, 1, 0.25], [7.958, 1, 0.25], [8.0, 1, 0.24], [8.041, 1, 0.24], [8.083, 2, 0.23], [8.125, 2, 0.2], [8.166, 2, 0.14], [8.208, 2, 0.12], [8.25, 2, 0.12], [8.291, 2, 0.12], [8.333, 2, 0.1], [8.375, 2, 0.1], [8.416, 2, 0.1], [8.458, 2, 0.1], [8.5, 2, 0.1], [8.541, 2, 0.1], [8.583, 2, 0.1], [8.625, 2, 0.1], [8.666, 2, 0.09], [8.708, 2, 0.08], [8.75, 2, 0.08], [8.791, 2, -0.04], [8.833, 2, -0.05], [8.875, 2, -0.05], [8.916, 2, -0.06], [8.958, 2, -0.06], [9.0, 2, -0.06], [9.041, 2, -0.06], [9.083, 2, -0.06], [9.125, 2, -0.06], [9.166, 2, -0.04], [9.208, 2, -0.04], [9.25, 2, -0.04], [9.291, 2, -0.04], [9.333, 2, -0.04], [9.375, 2, -0.04], [9.416, 2, -0.03], [9.458, 2, -0.03], [9.5, 2, -0.03], [9.541, 2, -0.03], [9.583, 2, -0.03], [9.625, 2, -0.03], [9.666, 2, -0.03], [9.708, 2, -0.03], [9.75, 2, -0.03], [9.791, 2, -0.03], [9.833, 2, -0.03], [9.875, 2, -0.01], [9.916, 2, -0.01], [9.958, 2, -0.01], [10.0, 2, -0.01], [10.041, 2, -0.01], [10.083, 2, -0.01], [10.125, 2, -0.01], [10.166, 2, -0.01], [10.208, 2, -0.01], [10.25, 2, -0.01], [10.291, 2, -0.01], [10.333, 2, -0.01], [10.375, 2, -0.01], [10.416, 2, -0.01], [10.458, 2, -0.01], [10.5, 2, -0.01], [10.541, 2, 0.01], [10.583, 2, 0.01], [10.625, 2, 0.01], [10.666, 2, 0.01], [10.708, 2, 0.01], [10.75, 2, 0.01], [10.791, 2, 0.01], [10.833, 2, 0.01], [10.875, 2, 0.01], [10.916, 2, 0.01], [10.958, 2, 0.01], [11.0, 2, 0.01], [11.041, 2, 0.01], [11.083, 2, 0.01], [11.125, 2, 0.01], [11.166, 2, 0.01], [11.208, 2, 0.01], [11.25, 2, 0.01], [11.291, 2, 0.01], [11.333, 2, 0.01], [11.375, 2, 0.01], [11.416, 2, 0.01], [11.458, 2, 0.01], [11.5, 2, 0.01], [11.541, 2, 0.01], [11.583, 2, 0.01], [11.625, 2, 0.01], [11.666, 2, 0.01], [11.708, 2, 0.01], [11.75, 2, 0.01], [11.791, 2, 0.01], [11.833, 2, 0.01], [11.875, 2, 0.01], [11.916, 2, 0.01], [11.958, 2, 0.01], [12.0, 2, 0.01], [12.041, 2, 0.01], [12.083, 2, 0.01], [12.125, 2, 0.01], [12.166, 2, 0.01], [12.208, 2, 0.01], [12.25, 2, 0.01], [12.291, 2, 0.01], [12.333, 2, 0.01], [12.375, 2, 0.01], [12.416, 2, 0.01], [12.458, 2, 0.01], [12.5, 2, 0.01], [12.541, 2, 0.01], [12.583, 2, 0.01], [12.625, 2, 0.01], [12.666, 2, 0.01], [12.708, 2, 0.01], [12.75, 2, 0.01], [12.791, 2, 0.01], [12.833, 2, 0.01], [12.875, 2, 0.01], [12.916, 2, 0.01], [12.958, 2, 0.01], [13.0, 2, 0.01], [13.041, 2, 0.01], [13.083, 2, 0.01], [13.125, 2, 0.01], [13.166, 2, 0.01], [13.208, 2, 0.01], [13.25, 2, 0.01], [13.291, 2, 0.01], [13.333, 2, 0.01], [13.374, 2, 0.01], [13.416, 2, 0.01], [13.458, 2, 0.01], [13.499, 2, -0.0], [13.541, 2, -0.0], [13.583, 2, -0.0], [13.624, 2, -0.0], [13.666, 2, -0.0], [13.708, 2, -0.0], [13.749, 2, -0.0], [13.791, 2, -0.0], [13.833, 2, -0.0], [13.874, 2, -0.0], [13.916, 2, -0.0], [13.958, 2, -0.0], [13.999, 2, -0.0], [14.041, 2, -0.0], [14.083, 2, -0.0], [14.124, 2, -0.0], [14.166, 2, -0.0], [14.208, 2, -0.0], [14.249, 2, -0.0], [14.291, 2, -0.0], [14.333, 2, -0.0], [14.374, 2, -0.0], [14.416, 2, -0.0], [14.458, 2, -0.0], [14.499, 2, -0.0], [14.541, 2, -0.0], [14.583, 2, -0.0], [14.624, 2, -0.0], [14.666, 2, -0.0], [14.708, 2, -0.0], [14.749, 2, -0.01], [14.791, 2, -0.01], [14.833, 2, -0.01], [14.874, 2, -0.01], [14.916, 2, -0.01], [14.958, 2, -0.01], [14.999, 2, -0.01], [15.041, 2, -0.01], [15.083, 2, -0.01], [15.124, 2, -0.01], [15.166, 2, -0.01], [15.208, 2, -0.01], [15.249, 2, -0.01], [15.291, 2, -0.01], [15.333, 2, -0.01], [15.374, 2, -0.01], [15.416, 2, -0.01], [15.458, 2, -0.01], [15.499, 2, -0.01], [15.541, 2, -0.01], [15.583, 2, -0.01], [15.624, 2, -0.02], [15.666, 2, -0.02], [15.708, 2, -0.02], [15.749, 2, -0.02], [15.791, 2, -0.02], [15.833, 2, -0.02], [15.874, 2, -0.02], [15.916, 2, -0.02], [15.958, 2, -0.02], [15.999, 2, -0.01], [16.041, 2, -0.01], [16.083, 2, -0.01], [16.124, 2, -0.01], [16.166, 2, -0.01], [16.208, 2, -0.01], [16.249, 2, -0.01], [16.291, 2, -0.01], [16.333, 2, -0.01], [16.374, 2, -0.01], [16.416, 2, -0.01], [16.458, 2, -0.01], [16.499, 2, -0.01], [16.541, 2, -0.02], [16.583, 2, -0.02], [16.624, 2, -0.02], [16.666, 2, -0.02], [16.708, 2, -0.02], [16.749, 2, -0.02], [16.791, 2, -0.02], [16.833, 2, -0.02], [16.874, 2, -0.02], [16.916, 2, -0.02], [16.958, 2, -0.02], [16.999, 2, -0.02], [17.041, 2, -0.02], [17.083, 2, -0.02], [17.124, 2, -0.02], [17.166, 2, -0.02], [17.208, 2, -0.02], [17.249, 2, -0.02], [17.291, 2, -0.02], [17.333, 2, -0.02], [17.374, 2, -0.02], [17.416, 2, -0.02], [17.458, 2, -0.02], [17.499, 2, -0.02], [17.541, 2, -0.02], [17.583, 2, -0.02], [17.624, 2, -0.02], [17.666, 2, -0.02], [17.708, 2, -0.02], [17.749, 2, -0.02], [17.791, 2, -0.02], [17.833, 2, -0.02], [17.874, 2, -0.02], [17.916, 2, -0.02], [17.958, 2, -0.02], [17.999, 2, -0.01], [18.041, 2, -0.01], [18.083, 2, -0.01], [18.124, 2, -0.01], [18.166, 2, -0.01], [18.208, 2, -0.01], [18.249, 2, -0.01], [18.291, 2, -0.01], [18.333, 2, -0.01], [18.374, 2, -0.01], [18.416, 2, -0.01], [18.458, 2, -0.01], [18.499, 2, -0.02], [18.541, 2, -0.02], [18.583, 2, -0.02], [18.624, 2, -0.02], [18.666, 2, -0.02], [18.708, 2, -0.02], [18.749, 2, -0.02], [18.791, 2, -0.02], [18.833, 2, -0.02], [18.874, 2, -0.02], [18.916, 2, -0.02], [18.958, 2, -0.02], [18.999, 2, -0.02], [19.041, 2, -0.02], [19.083, 2, -0.02], [19.124, 2, -0.01], [19.166, 2, -0.01], [19.208, 2, -0.01], [19.249, 2, -0.01], [19.291, 2, -0.01], [19.333, 2, -0.01], [19.374, 2, -0.01], [19.416, 2, -0.01], [19.458, 2, -0.01], [19.499, 2, -0.01], [19.541, 2, -0.01], [19.583, 2, -0.01], [19.624, 2, -0.01], [19.666, 2, -0.01], [19.708, 2, -0.01], [19.749, 2, -0.01], [19.791, 2, -0.01], [19.833, 2, -0.01], [19.874, 2, -0.01], [19.916, 2, -0.01], [19.958, 2, -0.0], [19.999, 2, -0.0], [20.041, 2, -0.0], [20.083, 2, -0.0], [20.124, 2, -0.0], [20.166, 2, -0.0], [20.208, 2, -0.0], [20.249, 2, -0.0], [20.291, 2, 0.03], [20.333, 2, 0.16], [20.374, 2, 0.18], [20.416, 2, 0.21], [20.458, 2, 0.23], [20.499, 2, 0.23], [20.541, 2, 0.24], [20.583, 2, 0.24], [20.624, 2, 0.23], [20.666, 2, 0.23], [20.708, 2, 0.23], [20.749, 2, 0.23], [20.791, 2, 0.22], [20.833, 2, 0.23], [20.874, 2, 0.23], [20.916, 2, 0.23], [20.958, 2, 0.25], [20.999, 2, 0.25], [21.041, 2, 0.25], [21.083, 1, 0.3], [21.124, 1, 0.25], [21.166, 1, 0.26], [21.208, 1, 0.26], [21.249, 1, 0.26], [21.291, 1, 0.3], [21.333, 1, 0.3], [21.374, 1, 0.34], [21.416, 1, 0.34], [21.458, 1, 0.34], [21.499, 1, 0.34], [21.541, 1, 0.34], [21.583, 1, 0.34], [21.624, 1, 0.34], [21.666, 1, 0.34], [21.708, 1, 0.34], [21.749, 1, 0.34], [21.791, 1, 0.34], [21.833, 1, 0.34], [21.874, 1, 0.34], [21.916, 1, 0.34], [21.958, 1, 0.34], [21.999, 1, 0.34], [22.041, 1, 0.34], [22.083, 1, 0.34], [22.124, 1, 0.34], [22.166, 1, 0.34], [22.207, 1, 0.34], [22.249, 1, 0.34], [22.291, 1, 0.34], [22.332, 1, 0.34], [22.374, 1, 0.34], [22.416, 1, 0.34], [22.457, 1, 0.34], [22.499, 1, 0.34], [22.541, 1, 0.62], [22.582, 1, 0.62], [22.624, 0, 0.73], [22.666, 0, 0.85], [22.707, 0, 0.86], [22.749, 0, 0.86], [22.791, 0, 0.87], [22.832, 0, 0.88], [22.874, 0, 0.91], [22.916, 0, 0.91], [22.957, 0, 0.91], [22.999, 0, 0.91], [23.041, 0, 1.35], [23.082, 0, 1.35], [23.124, 0, 1.35], [23.166, 0, 1.4], [23.207, 0, 1.4], [23.249, 0, 1.38], [23.291, 0, 1.38], [23.332, 0, 1.32], [23.374, 0, 1.32], [23.416, 0, 1.32], [23.457, 0, 1.32], [23.499, 0, 1.32], [23.541, 0, 1.32], [23.582, 0, 1.32], [23.624, 0, 1.32], [23.666, 0, 1.32], [23.707, 0, 1.32], [23.749, 0, 1.32], [23.791, 0, 1.32], [23.832, 0, 1.32], [23.874, 0, 1.32], [23.916, 0, 1.32], [23.957, 0, 1.32], [23.999, 0, 1.32], [24.041, 0, 1.32], [24.082, 0, 1.32], [24.124, 0, 1.32], [24.166, 0, 1.32], [24.207, 0, 1.32], [24.249, 0, 1.32], [24.291, 0, 1.32], [24.332, 0, 1.32], [24.374, 0, 1.32], [24.416, 0, 1.32], [24.457, 0, 1.32], [24.499, 0, 1.32], [24.541, 0, 1.32], [24.582, 0, 1.32], [24.624, 0, 1.32], [24.666, 0, 1.29], [24.707, 0, 1.29], [24.749, 0, 1.29], [24.791, 0, 1.29], [24.832, 0, 1.29], [24.874, 0, 1.29], [24.916, 0, 1.29], [24.957, 0, 1.29], [24.999, 0, 1.29], [25.041, 0, 1.29], [25.082, 0, 1.29], [25.124, 0, 1.29], [25.166, 0, 1.29], [25.207, 0, 1.29], [25.249, 0, 1.29], [25.291, 0, 1.29], [25.332, 0, 1.29], [25.374, 0, 1.29], [25.416, 0, 1.29], [25.457, 0, 1.29], [25.499, 0, 1.29], [25.541, 0, 1.29], [25.582, 0, 1.29], [25.624, 0, 1.29], [25.666, 0, 1.29], [25.707, 0, 1.29], [25.749, 0, 1.29], [25.791, 0, 1.29], [25.832, 0, 1.29], [25.874, 0, 1.29], [25.916, 0, 1.29], [25.957, 0, 1.29]], "stops": [[8.083, 21.041]], "slows": [[7.916, 8.041], [21.083, 22.582]], "bracket": [2.384, 11.364], "floor": [[4.226, 6.364]], "pole": [[3.408, 6.131], [2.384, 2.384]], "signs": [{"k": "pole", "d": [[3.408, 570.6, 264.6, 589.8, 284.8], [3.69, 561.6, 260.3, 582.5, 280.4], [4.226, 538.6, 238.6, 563.4, 260.5], [4.51, 521.9, 226.5, 549.3, 247.8], [4.756, 504.2, 211.0, 536.7, 238.5], [5.071, 472.2, 172.5, 514.1, 208.0], [5.307, 446.3, 143.7, 494.1, 187.0], [5.594, 405.6, 96.9, 462.3, 148.2], [5.819, 347.4, 52.8, 417.9, 114.6], [6.131, 273.9, 0.8, 336.7, 41.9]]}, {"k": "floor", "d": [[4.226, 637.6, 402.5, 679.5, 413.4], [4.51, 641.4, 407.4, 683.2, 420.3], [4.756, 640.6, 415.2, 685.4, 427.4], [5.071, 637.6, 418.9, 687.1, 437.0], [5.594, 634.5, 430.7, 702.9, 465.4], [6.131, 632.8, 471.9, 735.3, 543.9], [6.364, 616.5, 499.4, 765.0, 602.0]]}, {"k": "pole", "d": [[2.384, 596.4, 286.4, 611.3, 302.0]]}], "overlap": 3.281, "dur": 25.957}, {"src": "assets/videos/rolling_stop_jp/case2.mp4?v=1788497995", "poster": "assets/videos/rolling_stop_jp/case2.jpg", "verdict": "違規", "cls": "violation", "stmt": "累積靜止 0.000 秒 ≤ 門檻 0.5 秒", "title": "全程未減速直接通過——0.00 秒", "desc": "全程沒有任何靜止幀，車輛未停直接通過停止標誌，違規明確成立。地面「止」標線與桿上立牌先後被追蹤到（時間軸的綠、藍窗），觀察窗內卻連一幀靜止都量不到——這是最沒有爭議的違規型態。", "meta": "客戶B・車號尾碼 101・2026-05-24 12:33 (JST)", "frames": [[0.0, 0, 0.0], [0.042, 0, 2.99], [0.083, 0, 3.08], [0.125, 0, 3.16], [0.167, 0, 4.16], [0.208, 0, 3.9], [0.25, 0, 3.9], [0.292, 0, 5.11], [0.333, 0, 5.11], [0.375, 0, 5.11], [0.417, 0, 5.49], [0.458, 0, 5.49], [0.5, 0, 5.49], [0.542, 0, 5.47], [0.583, 0, 5.36], [0.625, 0, 5.36], [0.667, 0, 5.47], [0.708, 0, 5.66], [0.75, 0, 5.66], [0.792, 0, 6.01], [0.833, 0, 6.01], [0.875, 0, 6.01], [0.917, 0, 7.35], [0.958, 0, 7.35], [1.0, 0, 7.35], [1.042, 0, 7.98], [1.083, 0, 7.61], [1.125, 0, 6.02], [1.167, 0, 6.02], [1.208, 0, 6.69], [1.25, 0, 6.69], [1.292, 0, 6.69], [1.333, 0, 6.69], [1.375, 0, 6.69], [1.417, 0, 8.12], [1.458, 0, 6.4], [1.5, 0, 4.76], [1.542, 0, 4.45], [1.583, 0, 4.45], [1.625, 0, 3.68], [1.667, 0, 4.45], [1.708, 0, 4.45], [1.75, 0, 4.51], [1.792, 0, 4.7], [1.833, 0, 5.17], [1.875, 0, 5.17], [1.917, 0, 4.94], [1.958, 0, 4.94], [2.0, 0, 4.94], [2.042, 0, 4.94], [2.083, 0, 3.65], [2.125, 0, 3.65], [2.167, 0, 3.65], [2.208, 0, 7.8], [2.25, 0, 7.8], [2.292, 0, 7.8], [2.333, 0, 7.8], [2.375, 0, 4.63], [2.417, 0, 4.63], [2.458, 0, 4.63], [2.5, 0, 4.63], [2.542, 0, 4.54], [2.583, 0, 4.54], [2.625, 0, 3.54], [2.667, 0, 3.54], [2.708, 0, 3.54], [2.75, 0, 3.6], [2.792, 0, 4.84], [2.833, 0, 4.84], [2.875, 0, 4.34], [2.917, 0, 4.34], [2.958, 0, 4.34], [3.0, 0, 4.34], [3.042, 0, 4.34], [3.083, 0, 4.53], [3.125, 0, 4.99], [3.167, 0, 6.96], [3.208, 0, 4.99], [3.25, 0, 4.78], [3.292, 0, 4.99], [3.333, 0, 4.78], [3.375, 0, 4.55], [3.417, 0, 3.97], [3.458, 0, 3.82], [3.5, 0, 3.82], [3.542, 0, 2.41], [3.583, 0, 2.41], [3.625, 0, 2.41], [3.667, 0, 2.41], [3.708, 0, 2.41], [3.75, 0, 2.48], [3.792, 0, 2.5], [3.833, 0, 2.5], [3.875, 0, 2.5], [3.917, 0, 2.5], [3.958, 0, 2.5], [4.0, 0, 2.19], [4.042, 0, 1.63], [4.083, 0, 1.63], [4.125, 0, 1.16], [4.167, 0, 1.16], [4.208, 0, 1.16], [4.25, 0, 1.65], [4.292, 0, 2.22], [4.333, 0, 2.44], [4.375, 0, 2.22], [4.417, 0, 2.71], [4.458, 0, 2.71], [4.5, 0, 2.71], [4.542, 0, 2.67], [4.583, 0, 2.71], [4.625, 0, 2.72], [4.667, 0, 2.72], [4.708, 0, 2.63], [4.75, 0, 2.63], [4.792, 0, 2.63], [4.833, 0, 2.46], [4.875, 0, 2.46], [4.917, 0, 2.65], [4.958, 0, 3.72], [5.0, 0, 3.72], [5.042, 0, 3.72], [5.083, 0, 3.67], [5.125, 0, 3.67], [5.167, 0, 3.08], [5.208, 0, 3.08], [5.25, 0, 3.08], [5.292, 0, 3.08], [5.333, 0, 2.9], [5.375, 0, 2.24], [5.417, 0, 1.79], [5.458, 0, 1.39], [5.5, 0, 0.9], [5.542, 0, 0.9], [5.583, 0, 1.39], [5.625, 0, 1.39], [5.667, 0, 1.66], [5.708, 0, 1.66], [5.75, 0, 1.66], [5.792, 0, 1.66], [5.833, 0, 1.66], [5.875, 0, 1.66], [5.917, 0, 1.66], [5.958, 0, 1.22], [6.0, 0, 1.22], [6.042, 0, 1.63], [6.083, 0, 1.22], [6.125, 0, 1.22], [6.167, 0, 1.2], [6.208, 0, 1.2], [6.25, 0, 1.2], [6.292, 0, 1.09], [6.333, 0, 0.89], [6.375, 0, 0.89], [6.417, 0, 0.89], [6.458, 0, 0.89], [6.5, 0, 1.17], [6.542, 0, 1.17], [6.583, 0, 1.28], [6.625, 0, 1.28], [6.667, 0, 1.17], [6.708, 0, 1.17], [6.75, 0, 1.15], [6.792, 0, 0.74], [6.833, 0, 0.74], [6.875, 0, 0.74], [6.917, 0, 1.0], [6.958, 0, 0.74], [7.0, 0, 0.74], [7.042, 0, 0.7], [7.083, 0, 0.7], [7.125, 0, 0.54], [7.167, 0, 0.52], [7.208, 1, 0.51], [7.25, 1, 0.51], [7.292, 1, 0.48], [7.333, 1, 0.48], [7.375, 1, 0.49], [7.417, 1, 0.49], [7.458, 1, 0.49], [7.5, 1, 0.49], [7.542, 1, 0.45], [7.583, 1, 0.45], [7.625, 1, 0.43], [7.667, 1, 0.43], [7.708, 1, 0.43], [7.75, 1, 0.43], [7.792, 1, 0.52], [7.833, 1, 0.64], [7.875, 1, 0.64], [7.917, 0, 0.64], [7.958, 0, 0.64], [8.0, 0, 0.44], [8.042, 0, 0.42], [8.083, 1, 0.42], [8.125, 1, 0.37], [8.167, 1, 0.37], [8.208, 1, 0.33], [8.25, 1, 0.33], [8.292, 1, 0.33], [8.333, 1, 0.33], [8.375, 1, 0.38], [8.417, 1, 0.38], [8.458, 1, 0.47], [8.5, 1, 0.47], [8.542, 1, 0.38], [8.583, 1, 0.51], [8.625, 1, 0.53], [8.667, 1, 0.53], [8.708, 1, 0.38], [8.75, 1, 0.38], [8.792, 1, 0.57], [8.833, 1, 0.6], [8.875, 0, 0.6], [8.917, 0, 0.32], [8.958, 0, 0.56], [9.0, 0, 0.56], [9.042, 0, 0.56], [9.083, 0, 0.56], [9.125, 0, 0.56], [9.167, 0, 0.49], [9.208, 0, 0.5], [9.25, 1, 0.5], [9.292, 1, 0.49], [9.333, 1, 0.49], [9.375, 1, 0.47], [9.417, 1, 0.42], [9.458, 1, 0.42], [9.5, 1, 0.42], [9.542, 1, 0.42], [9.583, 1, 0.41], [9.625, 1, 0.44], [9.667, 1, 0.44], [9.708, 1, 0.47], [9.75, 1, 0.47], [9.792, 1, 0.48], [9.833, 1, 0.5], [9.875, 1, 0.54], [9.917, 1, 0.54], [9.958, 1, 0.54], [10.0, 1, 0.54], [10.042, 1, 0.56], [10.083, 1, 0.67], [10.125, 0, 0.67], [10.167, 0, 0.67], [10.208, 0, 0.67], [10.25, 0, 0.91], [10.292, 0, 0.91], [10.333, 0, 0.91], [10.375, 0, 0.91], [10.417, 0, 0.91], [10.458, 0, 0.91], [10.5, 0, 0.91], [10.542, 0, 0.91], [10.583, 0, 0.91], [10.625, 0, 0.91], [10.667, 0, 0.91], [10.708, 0, 0.91], [10.75, 0, 0.91], [10.792, 0, 0.91], [10.833, 0, 0.91], [10.875, 0, 0.91], [10.917, 0, 0.91], [10.958, 0, 0.91], [11.0, 0, 0.91], [11.042, 0, 0.91], [11.083, 0, 0.91], [11.125, 0, 0.91], [11.167, 0, 0.91], [11.208, 0, 0.91], [11.25, 0, 0.91], [11.292, 0, 0.91], [11.333, 0, 0.91], [11.375, 0, 0.91], [11.417, 0, 0.91], [11.458, 0, 0.91], [11.5, 0, 0.91], [11.542, 0, 0.91], [11.583, 0, 0.91], [11.625, 0, 0.91], [11.667, 0, 0.91], [11.708, 0, 0.91], [11.75, 0, 0.91], [11.792, 0, 0.91], [11.833, 0, 0.91], [11.875, 0, 0.91], [11.917, 0, 0.91], [11.958, 0, 0.91], [12.0, 0, 0.91], [12.042, 0, 0.91], [12.083, 0, 0.91], [12.125, 0, 0.91], [12.167, 0, 0.91], [12.208, 0, 0.91], [12.25, 0, 0.91], [12.292, 0, 0.91], [12.333, 0, 0.91], [12.375, 0, 0.91], [12.417, 0, 0.91], [12.458, 0, 0.91], [12.5, 0, 0.91], [12.542, 0, 0.91], [12.583, 0, 0.91], [12.625, 0, 0.91], [12.667, 0, 0.91], [12.708, 0, 0.91], [12.75, 0, 0.91], [12.792, 0, 0.91], [12.833, 0, 0.91], [12.875, 0, 0.91], [12.917, 0, 0.91], [12.958, 0, 0.91], [13.0, 0, 0.91], [13.042, 0, 0.91], [13.083, 0, 0.91], [13.125, 0, 0.91], [13.167, 0, 0.91], [13.208, 0, 0.91], [13.25, 0, 0.91], [13.292, 0, 0.91], [13.333, 0, 0.91], [13.375, 0, 0.91], [13.417, 0, 0.91], [13.458, 0, 0.91], [13.5, 0, 0.91], [13.542, 0, 0.91], [13.583, 0, 0.91], [13.625, 0, 0.91], [13.667, 0, 0.91], [13.708, 0, 0.91], [13.75, 0, 1.0], [13.792, 0, 1.0], [13.833, 0, 1.0], [13.875, 0, 1.0], [13.917, 0, 1.33], [13.958, 0, 1.0], [14.0, 0, 1.0], [14.042, 0, 0.83], [14.083, 0, 0.83], [14.125, 0, 0.83], [14.167, 0, 0.94], [14.208, 0, 1.31], [14.25, 0, 1.65], [14.292, 0, 1.38], [14.333, 0, 1.38], [14.375, 0, 1.38], [14.417, 0, 1.39], [14.458, 0, 1.39], [14.5, 0, 1.39], [14.542, 0, 1.39], [14.583, 0, 1.11], [14.625, 0, 1.05], [14.667, 0, 1.05], [14.708, 0, 1.11], [14.75, 0, 1.16], [14.792, 0, 1.96], [14.833, 0, 1.96], [14.875, 0, 1.16], [14.917, 0, 1.96], [14.958, 0, 1.44], [15.0, 0, 1.44], [15.042, 0, 1.8], [15.083, 0, 2.13], [15.125, 0, 2.0], [15.167, 0, 2.06], [15.208, 0, 2.04], [15.25, 0, 2.06], [15.292, 0, 2.04], [15.333, 0, 2.04], [15.375, 0, 2.04], [15.417, 0, 2.15], [15.458, 0, 2.15], [15.5, 0, 2.15], [15.542, 0, 2.15], [15.583, 0, 1.75], [15.625, 0, 1.75], [15.667, 0, 1.75], [15.708, 0, 1.78], [15.75, 0, 1.89], [15.792, 0, 2.45], [15.833, 0, 1.99], [15.875, 0, 1.99], [15.917, 0, 1.99], [15.958, 0, 1.99]], "stops": [], "slows": [[7.208, 7.875], [8.083, 8.833], [9.25, 10.083]], "bracket": [3.848, 10.94], "floor": [[3.848, 5.94]], "pole": [[5.117, 5.94]], "signs": [{"k": "floor", "d": [[3.848, 626.0, 401.2, 655.8, 411.2], [4.122, 623.3, 404.9, 661.8, 415.7], [4.361, 618.0, 418.1, 655.8, 430.2], [4.624, 612.8, 426.2, 654.6, 442.7], [4.822, 608.3, 438.4, 660.4, 458.7], [5.117, 600.1, 450.9, 661.8, 479.3], [5.373, 590.7, 464.3, 657.8, 504.2], [5.683, 569.7, 505.1, 667.0, 566.9], [5.94, 552.2, 532.0, 669.4, 618.0]]}, {"k": "pole", "d": [[5.117, 439.5, 186.4, 468.8, 219.9], [5.373, 403.6, 155.5, 444.1, 198.9], [5.683, 320.4, 99.2, 372.4, 150.6], [5.94, 257.8, 49.1, 322.6, 110.9]]}], "overlap": 0, "dur": 15.958}, {"src": "assets/videos/rolling_stop_jp/case3.mp4?v=1788497999", "poster": "assets/videos/rolling_stop_jp/case3.jpg", "verdict": "違規", "cls": "violation", "stmt": "累積靜止 0.292 秒 ≤ 門檻 0.5 秒", "title": "只點了一下剎車——0.292 秒，不夠", "desc": "車輛在停止線前明顯點剎，累積出僅 0.292 秒的靜止，距離 0.5 秒門檻還差一步——違規成立。這正是「rolling stop」最典型的樣子：有減速、有頓點，但沒有真正停下來；也是 GPS 與人眼最難分辨的灰色地帶。", "meta": "客戶B・車號尾碼 101・2026-05-02 12:56 (JST)", "frames": [[0.0, 0, 0.0], [0.042, 0, 0.0], [0.083, 0, 0.0], [0.125, 0, 0.0], [0.167, 1, 0.0], [0.208, 1, 0.0], [0.25, 1, 0.0], [0.292, 1, 1.35], [0.333, 1, 2.33], [0.375, 1, 2.71], [0.417, 0, 2.8], [0.458, 0, 2.8], [0.5, 0, 2.89], [0.542, 0, 2.89], [0.583, 0, 2.89], [0.625, 0, 2.71], [0.667, 0, 2.89], [0.708, 0, 1.89], [0.75, 0, 1.89], [0.792, 0, 1.89], [0.833, 0, 1.88], [0.875, 0, 1.04], [0.917, 0, 1.04], [0.958, 0, 1.04], [1.0, 0, 1.04], [1.042, 0, 1.04], [1.083, 0, 1.0], [1.125, 0, 0.94], [1.167, 0, 0.94], [1.208, 0, 0.94], [1.25, 0, 0.94], [1.292, 0, 0.94], [1.333, 0, 0.89], [1.375, 0, 0.89], [1.417, 0, 0.88], [1.458, 0, 0.89], [1.5, 0, 0.9], [1.542, 0, 0.93], [1.583, 0, 0.93], [1.625, 0, 1.0], [1.667, 0, 1.28], [1.708, 0, 1.28], [1.75, 0, 1.28], [1.792, 0, 1.28], [1.833, 0, 1.22], [1.875, 0, 1.22], [1.917, 0, 1.25], [1.958, 0, 1.34], [2.0, 0, 1.28], [2.042, 0, 1.28], [2.083, 0, 1.25], [2.125, 0, 1.25], [2.167, 0, 1.25], [2.208, 0, 1.24], [2.25, 0, 1.23], [2.292, 0, 1.24], [2.333, 0, 1.22], [2.375, 0, 1.22], [2.417, 0, 1.19], [2.458, 0, 1.19], [2.5, 0, 1.19], [2.542, 0, 0.99], [2.583, 0, 1.26], [2.625, 0, 1.26], [2.667, 0, 1.26], [2.708, 0, 1.33], [2.75, 0, 1.48], [2.792, 0, 1.61], [2.833, 0, 1.64], [2.875, 0, 1.64], [2.917, 0, 1.64], [2.958, 0, 1.64], [3.0, 0, 1.95], [3.042, 0, 1.95], [3.083, 0, 2.66], [3.125, 0, 2.66], [3.167, 0, 2.72], [3.208, 0, 2.72], [3.25, 0, 2.79], [3.292, 0, 2.94], [3.333, 0, 3.66], [3.375, 0, 3.66], [3.417, 0, 3.66], [3.458, 0, 3.66], [3.5, 0, 2.07], [3.542, 0, 2.07], [3.583, 0, 2.07], [3.625, 0, 2.06], [3.667, 0, 2.06], [3.708, 0, 1.97], [3.75, 0, 1.93], [3.792, 0, 1.73], [3.833, 0, 1.3], [3.875, 0, 1.3], [3.917, 0, 1.17], [3.958, 0, 0.99], [4.0, 0, 0.99], [4.042, 0, 0.88], [4.083, 0, 0.88], [4.125, 0, 1.47], [4.167, 0, 1.47], [4.208, 0, 1.17], [4.25, 0, 1.17], [4.292, 0, 0.93], [4.333, 0, 0.91], [4.375, 0, 0.85], [4.417, 0, 0.85], [4.458, 0, 0.85], [4.5, 0, 1.44], [4.542, 0, 1.46], [4.583, 0, 1.61], [4.625, 0, 1.79], [4.667, 0, 1.79], [4.708, 0, 1.61], [4.75, 0, 1.24], [4.792, 0, 1.24], [4.833, 0, 1.24], [4.875, 0, 1.24], [4.917, 0, 1.27], [4.958, 0, 1.3], [5.0, 0, 1.32], [5.042, 0, 1.32], [5.083, 0, 1.46], [5.125, 0, 1.46], [5.167, 0, 1.01], [5.208, 0, 0.93], [5.25, 0, 0.94], [5.292, 0, 0.86], [5.333, 0, 0.86], [5.375, 0, 0.86], [5.417, 0, 0.94], [5.458, 0, 0.94], [5.5, 0, 0.94], [5.542, 0, 1.49], [5.583, 0, 1.68], [5.625, 0, 1.68], [5.667, 0, 1.68], [5.708, 0, 1.68], [5.75, 0, 1.57], [5.792, 0, 0.79], [5.833, 0, 0.73], [5.875, 0, 0.73], [5.917, 0, 0.77], [5.958, 0, 0.77], [6.0, 0, 0.81], [6.042, 0, 0.87], [6.083, 0, 1.48], [6.125, 0, 0.87], [6.167, 0, 0.81], [6.208, 0, 0.78], [6.25, 0, 0.7], [6.292, 0, 0.7], [6.333, 0, 0.7], [6.375, 0, 0.63], [6.417, 0, 1.02], [6.458, 0, 1.02], [6.5, 0, 0.6], [6.542, 0, 0.6], [6.583, 0, 0.67], [6.625, 0, 0.6], [6.667, 0, 0.67], [6.708, 0, 0.72], [6.75, 0, 0.72], [6.792, 0, 0.73], [6.833, 0, 0.73], [6.875, 0, 0.73], [6.917, 0, 0.73], [6.958, 0, 1.57], [7.0, 0, 0.73], [7.042, 0, 1.57], [7.083, 0, 0.84], [7.125, 0, 0.84], [7.167, 0, 0.79], [7.208, 0, 0.84], [7.25, 0, 0.84], [7.292, 0, 0.79], [7.333, 0, 0.79], [7.375, 0, 1.35], [7.417, 0, 1.35], [7.458, 0, 1.0], [7.5, 0, 1.0], [7.542, 0, 1.0], [7.583, 0, 0.82], [7.625, 0, 1.0], [7.667, 0, 0.98], [7.708, 0, 0.82], [7.75, 0, 0.98], [7.792, 0, 0.98], [7.833, 0, 0.98], [7.875, 0, 0.97], [7.917, 0, 0.97], [7.958, 0, 0.97], [8.0, 0, 0.97], [8.042, 0, 0.97], [8.083, 0, 0.9], [8.125, 0, 0.76], [8.167, 0, 0.76], [8.208, 0, 0.76], [8.25, 0, 0.61], [8.292, 0, 0.61], [8.333, 0, 0.61], [8.375, 0, 0.59], [8.417, 0, 1.15], [8.458, 0, 1.15], [8.5, 0, 1.11], [8.542, 0, 1.11], [8.583, 0, 0.61], [8.625, 0, 0.61], [8.667, 0, 0.53], [8.708, 0, 0.51], [8.75, 1, 0.48], [8.792, 1, 0.48], [8.833, 1, 0.46], [8.875, 1, 0.46], [8.917, 1, 0.46], [8.958, 1, 0.46], [9.0, 1, 0.46], [9.042, 1, 0.39], [9.083, 1, 0.36], [9.125, 1, 0.36], [9.167, 1, 0.36], [9.208, 1, 0.36], [9.25, 1, 0.36], [9.292, 1, 0.28], [9.333, 1, 0.27], [9.375, 1, 0.27], [9.417, 1, 0.27], [9.458, 1, 0.19], [9.5, 1, 0.21], [9.542, 1, 0.21], [9.583, 2, 0.17], [9.625, 2, 0.17], [9.667, 2, 0.17], [9.708, 2, 0.17], [9.75, 2, 0.17], [9.792, 2, 0.41], [9.833, 2, 0.41], [9.875, 2, 0.41], [9.917, 1, 0.41], [9.958, 1, 0.41], [10.0, 1, 0.41], [10.042, 1, 0.41], [10.083, 1, 0.41], [10.125, 1, 0.41], [10.167, 1, 0.41], [10.208, 1, 0.41], [10.25, 1, 0.41], [10.292, 1, 0.41], [10.333, 1, 0.41], [10.375, 1, 0.41], [10.417, 1, 0.41], [10.458, 1, 0.41], [10.5, 1, 0.41], [10.542, 1, 0.41], [10.583, 1, 0.41], [10.625, 1, 0.41], [10.667, 1, 0.41], [10.708, 1, 0.41], [10.75, 1, 0.41], [10.792, 1, 0.41], [10.833, 1, 0.41], [10.875, 1, 0.41], [10.917, 1, 0.41], [10.958, 1, 0.41], [11.0, 1, 0.41], [11.042, 1, 0.41], [11.083, 1, 0.41], [11.125, 1, 0.41], [11.167, 1, 0.41], [11.208, 1, 0.41], [11.25, 1, 0.41], [11.292, 1, 0.41], [11.333, 1, 0.41], [11.375, 1, 0.41], [11.417, 1, 0.41], [11.458, 1, 0.41], [11.5, 1, 0.41], [11.542, 1, 0.41], [11.583, 1, 0.41], [11.625, 1, 0.41], [11.667, 1, 0.41], [11.708, 1, 0.41], [11.75, 1, 0.41], [11.792, 1, 0.41], [11.833, 1, 0.41], [11.875, 1, 0.41], [11.917, 1, 0.41], [11.958, 1, 0.41], [12.0, 1, 0.41], [12.042, 1, 0.41], [12.083, 1, 0.41], [12.125, 1, 0.41], [12.167, 1, 0.41], [12.208, 1, 0.41], [12.25, 1, 0.41], [12.292, 1, 0.41], [12.333, 1, 0.41], [12.375, 1, 0.41], [12.417, 1, 0.41], [12.458, 1, 0.41], [12.5, 1, 0.41], [12.542, 1, 0.41], [12.583, 1, 0.41], [12.625, 1, 0.41], [12.667, 1, 0.41], [12.708, 1, 0.41], [12.75, 1, 0.41], [12.792, 1, 0.41], [12.833, 1, 0.41], [12.875, 1, 0.41], [12.917, 1, 0.41], [12.958, 1, 0.41], [13.0, 1, 0.41], [13.042, 1, 0.41], [13.083, 1, 0.41], [13.125, 1, 0.41], [13.167, 1, 0.41], [13.208, 1, 0.41], [13.25, 1, 0.41], [13.292, 1, 0.41], [13.333, 1, 0.41], [13.375, 1, 0.41], [13.417, 1, 0.41], [13.458, 1, 0.41], [13.5, 1, 0.41], [13.542, 1, 0.41], [13.583, 1, 0.41], [13.625, 1, 0.41], [13.667, 1, 0.41], [13.708, 1, 0.41], [13.75, 1, 0.41], [13.792, 1, 0.41], [13.833, 1, 0.41], [13.875, 1, 0.41], [13.917, 1, 0.41], [13.958, 1, 0.41], [14.0, 1, 0.41], [14.042, 1, 0.41], [14.083, 1, 0.41], [14.125, 1, 0.41], [14.167, 1, 0.41], [14.208, 1, 0.0], [14.25, 1, 0.0], [14.292, 1, 0.0], [14.333, 1, 0.0], [14.375, 1, 0.0], [14.417, 1, 0.0], [14.458, 1, 0.0], [14.5, 1, 0.0], [14.542, 1, 0.0], [14.583, 1, 0.0], [14.625, 1, 0.0], [14.667, 1, 0.0], [14.708, 1, 0.0], [14.75, 1, 0.0], [14.792, 1, 0.0], [14.833, 1, 0.0], [14.875, 1, 0.0], [14.917, 1, 0.0], [14.958, 1, 0.41], [15.0, 1, 0.41], [15.042, 1, 0.94], [15.083, 1, 0.94], [15.125, 1, 1.54], [15.167, 0, 1.54], [15.208, 0, 1.57], [15.25, 0, 1.54], [15.292, 0, 1.53], [15.333, 0, 1.5], [15.375, 0, 1.47], [15.417, 0, 1.43], [15.458, 0, 1.37], [15.5, 0, 1.34], [15.542, 0, 1.3], [15.583, 0, 1.3], [15.625, 0, 1.25], [15.667, 0, 1.24], [15.708, 0, 1.16], [15.75, 0, 1.14], [15.792, 0, 1.11], [15.833, 0, 0.85], [15.875, 0, 0.85], [15.917, 0, 0.8], [15.958, 0, 0.8], [16.0, 0, 0.75], [16.042, 0, 1.21], [16.083, 0, 1.09], [16.125, 0, 1.09], [16.167, 0, 1.09], [16.208, 0, 0.95], [16.25, 0, 0.95], [16.292, 0, 0.94], [16.333, 0, 0.44], [16.375, 0, 0.44], [16.417, 1, 0.43], [16.458, 1, 0.43], [16.5, 1, 0.39], [16.542, 1, 0.33], [16.583, 1, 0.33], [16.625, 1, 0.32], [16.667, 1, 0.32], [16.708, 1, 0.33], [16.75, 1, 0.33], [16.792, 1, 0.29], [16.833, 1, 0.2], [16.875, 1, 0.19], [16.917, 1, 0.16], [16.958, 2, 0.16], [17.0, 2, 0.15], [17.042, 2, 0.15], [17.083, 2, 0.15], [17.125, 2, 0.1], [17.167, 2, 0.06], [17.208, 2, 0.05], [17.25, 2, 0.05], [17.292, 2, 0.05], [17.333, 2, 0.05], [17.375, 2, 0.03], [17.417, 2, 0.01], [17.458, 2, -0.03], [17.5, 2, -0.04], [17.542, 2, -0.07], [17.583, 2, -0.07], [17.625, 2, -0.07], [17.667, 2, -0.07], [17.708, 2, -0.07], [17.75, 2, -0.07], [17.792, 2, -0.07], [17.833, 2, -0.07], [17.875, 2, -0.07], [17.917, 2, -0.07], [17.958, 2, -0.03], [18.0, 2, -0.03], [18.042, 2, -0.03], [18.083, 2, -0.03], [18.125, 2, -0.03], [18.167, 2, -0.01], [18.208, 2, -0.01], [18.25, 2, -0.01], [18.292, 2, -0.01], [18.333, 2, -0.01], [18.375, 2, -0.01], [18.417, 2, -0.01], [18.458, 2, -0.01], [18.5, 2, -0.01], [18.542, 2, -0.01], [18.583, 2, -0.01], [18.625, 2, -0.01], [18.667, 2, -0.01], [18.708, 2, -0.01], [18.75, 2, -0.01], [18.792, 2, -0.01], [18.833, 2, -0.01], [18.875, 2, -0.01], [18.917, 2, -0.01], [18.958, 2, -0.01], [19.0, 2, -0.01], [19.042, 2, -0.01], [19.083, 2, -0.01], [19.125, 2, -0.01], [19.167, 2, -0.01], [19.208, 2, -0.01], [19.25, 2, -0.01], [19.292, 2, -0.01], [19.333, 2, -0.01], [19.375, 2, -0.01], [19.417, 2, -0.01], [19.458, 2, -0.01], [19.5, 2, -0.01], [19.542, 2, -0.01], [19.583, 2, -0.01], [19.625, 2, -0.0], [19.667, 2, -0.0], [19.708, 2, -0.0], [19.75, 2, -0.0], [19.792, 2, -0.0], [19.833, 2, -0.0], [19.875, 2, -0.0], [19.917, 2, -0.0], [19.958, 2, -0.0], [20.0, 2, -0.0], [20.042, 2, -0.0], [20.083, 2, -0.0], [20.125, 2, -0.0], [20.167, 2, -0.0], [20.208, 2, -0.0], [20.25, 2, -0.0], [20.292, 2, -0.0], [20.333, 2, -0.0], [20.375, 2, -0.0], [20.417, 2, -0.0], [20.458, 2, -0.0], [20.5, 2, -0.0], [20.542, 2, -0.0], [20.583, 2, -0.0], [20.625, 2, -0.0], [20.667, 2, -0.0], [20.708, 2, -0.0], [20.75, 2, -0.0], [20.792, 2, -0.0], [20.833, 2, -0.0], [20.875, 2, -0.0], [20.917, 2, -0.0], [20.958, 2, -0.0], [21.0, 2, -0.0], [21.042, 2, -0.0], [21.083, 2, -0.0], [21.125, 2, -0.0], [21.167, 2, -0.0], [21.208, 2, -0.0], [21.25, 2, -0.0], [21.292, 2, -0.0], [21.333, 2, -0.0], [21.375, 2, -0.0], [21.417, 2, -0.0], [21.458, 2, -0.0], [21.5, 2, -0.0], [21.542, 2, -0.0], [21.583, 2, -0.0], [21.625, 2, -0.0], [21.667, 2, -0.01], [21.708, 2, -0.01], [21.75, 2, -0.01], [21.792, 2, -0.01], [21.833, 2, -0.01], [21.875, 2, -0.0], [21.917, 2, -0.0], [21.958, 2, -0.0], [22.0, 2, -0.0], [22.042, 2, -0.0], [22.083, 2, -0.0], [22.125, 2, -0.0], [22.167, 2, -0.0], [22.208, 2, -0.0], [22.25, 2, -0.0], [22.292, 2, -0.0], [22.333, 2, -0.0], [22.375, 2, -0.0], [22.417, 2, -0.0], [22.458, 2, -0.0], [22.5, 2, -0.0], [22.542, 2, -0.0], [22.583, 2, -0.0], [22.625, 2, -0.0], [22.667, 2, -0.0], [22.708, 2, -0.0], [22.75, 2, -0.0], [22.792, 2, -0.0], [22.833, 2, -0.0], [22.875, 2, -0.0], [22.917, 2, -0.0], [22.958, 2, -0.0], [23.0, 2, -0.0], [23.042, 2, -0.0], [23.083, 2, -0.0], [23.125, 2, -0.0], [23.167, 2, -0.0], [23.208, 2, -0.0], [23.25, 2, -0.0], [23.292, 2, -0.0], [23.333, 2, -0.0], [23.375, 2, -0.0], [23.417, 2, -0.0], [23.458, 2, -0.0], [23.5, 2, -0.0], [23.542, 2, -0.0], [23.583, 2, -0.0], [23.625, 2, -0.0], [23.667, 2, -0.0], [23.708, 2, -0.0], [23.75, 2, -0.0], [23.792, 2, -0.0], [23.833, 2, -0.0], [23.875, 2, -0.0], [23.917, 2, -0.0], [23.958, 2, -0.0], [24.0, 2, -0.0], [24.042, 2, -0.0], [24.083, 2, -0.0], [24.125, 2, -0.0], [24.167, 2, -0.0], [24.208, 2, -0.0], [24.25, 2, -0.0], [24.292, 2, -0.0], [24.333, 2, -0.0], [24.375, 2, -0.0], [24.417, 2, -0.0], [24.458, 2, -0.0], [24.5, 2, -0.0], [24.542, 2, -0.0], [24.583, 2, -0.0], [24.625, 2, -0.0], [24.667, 2, -0.0], [24.708, 2, -0.0], [24.75, 2, -0.0], [24.792, 2, -0.0], [24.833, 2, -0.0], [24.875, 2, -0.0], [24.917, 2, -0.0], [24.958, 2, -0.0], [25.0, 2, -0.0], [25.042, 2, -0.0], [25.083, 2, -0.0], [25.125, 2, -0.0], [25.167, 2, -0.0], [25.208, 2, -0.0], [25.25, 2, -0.0], [25.292, 2, -0.0], [25.333, 2, -0.0], [25.375, 2, -0.0], [25.417, 2, -0.0], [25.458, 2, -0.0], [25.5, 2, -0.0], [25.542, 2, -0.0], [25.583, 2, -0.0], [25.625, 2, -0.0], [25.667, 2, -0.0], [25.708, 2, -0.0], [25.75, 2, -0.0], [25.792, 2, -0.0], [25.833, 2, -0.0], [25.875, 2, -0.0], [25.917, 2, -0.0], [25.958, 2, -0.0], [26.0, 2, -0.0], [26.042, 2, -0.0], [26.083, 2, -0.0], [26.125, 2, -0.0], [26.167, 2, -0.0], [26.208, 2, -0.0], [26.25, 2, -0.0], [26.292, 2, -0.0], [26.333, 2, -0.0], [26.375, 2, -0.0], [26.417, 2, -0.0], [26.458, 2, -0.0], [26.5, 2, -0.0], [26.542, 2, -0.0], [26.583, 2, -0.0], [26.625, 2, -0.0], [26.667, 2, -0.0], [26.708, 2, -0.0], [26.75, 2, -0.0], [26.792, 2, -0.0], [26.833, 2, -0.0], [26.875, 2, -0.0], [26.917, 2, -0.01], [26.958, 2, -0.01]], "stops": [[9.583, 9.875], [16.958, 26.958]], "slows": [[0.167, 0.375], [8.75, 9.542], [9.917, 15.125], [16.417, 16.917]], "bracket": [3.532, 13.34], "floor": [[3.532, 7.727]], "pole": [[5.569, 8.34]], "signs": [{"k": "floor", "d": [[3.532, 537.5, 396.2, 569.5, 404.8], [4.024, 554.7, 402.6, 593.1, 411.0], [4.42, 575.8, 408.3, 614.2, 418.3], [4.659, 586.7, 410.1, 628.5, 420.0], [5.01, 600.2, 409.2, 642.0, 423.2], [5.266, 605.7, 414.4, 650.4, 431.4], [5.569, 606.4, 424.1, 656.0, 443.7], [5.838, 608.3, 428.4, 660.4, 454.5], [6.27, 598.0, 443.5, 666.4, 475.4], [6.529, 585.5, 451.9, 668.9, 496.0], [6.857, 577.2, 470.4, 671.3, 521.7], [7.129, 565.4, 484.2, 671.3, 551.4], [7.465, 537.0, 503.5, 673.6, 597.8], [7.727, 535.3, 525.1, 686.3, 618.8]]}, {"k": "pole", "d": [[5.569, 368.8, 294.9, 398.1, 323.1], [5.838, 348.7, 290.0, 384.1, 317.5], [6.27, 308.8, 281.3, 347.8, 315.5], [6.529, 282.8, 277.7, 321.2, 310.3], [6.857, 249.1, 273.9, 287.6, 309.3], [7.129, 212.4, 260.8, 258.6, 308.7], [7.465, 171.8, 255.3, 219.6, 298.6], [7.727, 134.8, 246.2, 182.7, 293.5], [8.075, 91.8, 234.7, 139.7, 286.1], [8.34, 58.7, 224.5, 108.9, 286.3]]}], "overlap": 0.292, "dur": 26.958}];
+const THRESHOLD = 0.5;
+const R_STOP = 0.25, R_MOVE = 0.55;
+const IMG_W = 1280, IMG_H = 720;
+const STATE_NAME = ["MOVING", "SLOW", "STOPPED"];
+const C = { blue:"#38bdf8", green:"#34d399", warn:"#fbbf24", danger:"#f87171",
+            ink:"#e2e8f0", muted:"#94a3b8", line:"#334155" };
+
+let ci = 0;                 // 目前案例 index
+let cs = CASES[0];
+const video = document.getElementById("main-video");
+const overlay = document.getElementById("overlay");
+const hudState = document.getElementById("hud-state");
+const hudOverlap = document.getElementById("hud-overlap");
+const cvTimeline = document.getElementById("chartTimeline");
+const cvRadial = document.getElementById("chartRadial");
+const cvOverlapC = document.getElementById("chartOverlap");
+const items = Array.from(document.querySelectorAll(".pl-item"));
+const PAD = { l: 40, r: 10, t: 6, b: 18 };
+let chartCache = [];        // [canvas, imageData] 供游標重繪
+
+// ---- 案例切換 ----
+function selectCase(i, play) {
+  ci = i; cs = CASES[i];
+  video.src = cs.src;
+  video.poster = cs.poster;
+  video.playbackRate = parseFloat(document.getElementById("rate").value);
+  document.getElementById("vp-badge").textContent = cs.verdict;
+  document.getElementById("vp-badge").className = "vp-badge " + cs.cls;
+  document.getElementById("vp-stmt").textContent = cs.stmt + " → " + cs.verdict;
+  document.getElementById("vp-title").textContent = "範例" + "一二三四五六七八"[i] + "：" + cs.title;
+  document.getElementById("vp-desc").textContent = cs.desc;
+  document.getElementById("vp-meta").textContent = cs.meta;
+  items.forEach((el, j) => el.classList.toggle("active", j === i));
+  drawCharts();
+  if (play) video.play().catch(() => {});
+}
+items.forEach((el, i) => el.addEventListener("click", () => selectCase(i, true)));
+
+// ---- 逐幀 ----
+const FRAME_DT = 1 / 24;
+function frameAt(t) {
+  const fs = cs.frames;
+  let lo = 0, hi = fs.length - 1;
+  while (lo < hi) { const m = (lo + hi + 1) >> 1; (fs[m][0] <= t + 0.021) ? lo = m : hi = m - 1; }
+  return lo;
+}
+// seek 節流: 瀏覽器 seek 未完成前先記住目標, seeked 後再補跳一次,
+// 拖曳時不會把幾十個 seek 排隊塞爆解碼器
+let seekPending = null;
+function seekTo(t) {
+  t = Math.max(0, Math.min(cs.dur, t)) + 0.001;
+  if (video.seeking) { seekPending = t; return; }
+  video.currentTime = t;
+}
+video.addEventListener("seeked", () => {
+  if (seekPending != null) { const t = seekPending; seekPending = null; video.currentTime = t; }
+});
+
+// ---- 影片下方迷你時間軸 ----
+const scrub = document.getElementById("scrub");
+function scrubSeek(e) {
+  const r = scrub.getBoundingClientRect();
+  seekTo(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * cs.dur);
+}
+scrub.onpointerdown = e => { e.preventDefault(); scrub.setPointerCapture(e.pointerId);
+  scrub._drag = true; video.pause(); scrubSeek(e); };
+scrub.onpointermove = e => { if (scrub._drag) scrubSeek(e); };
+scrub.onpointerup = scrub.onpointercancel = () => { scrub._drag = false; };
+function drawScrub(t) {
+  const rs = rootScale();
+  const w = scrub.clientWidth / rs, h = scrub.clientHeight / rs;
+  if (!w) return;
+  if (scrub.width !== Math.round(w * devicePixelRatio)) {
+    scrub.width = w * devicePixelRatio; scrub.height = h * devicePixelRatio;
+  }
+  const ctx = scrub.getContext("2d");
+  ctx.setTransform(devicePixelRatio * rs, 0, 0, devicePixelRatio * rs, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const y0 = h / 2 - 3, X = tt => Math.max(0, Math.min(1, tt / cs.dur)) * w;
+  ctx.fillStyle = "rgba(51,65,85,.85)"; ctx.fillRect(0, y0, w, 6);
+  // 判決觀察窗 bracket 色帶 (與下方時間軸圖同語意)
+  ctx.fillStyle = "rgba(251,191,36,.4)";
+  ctx.fillRect(X(cs.bracket[0]), y0, X(cs.bracket[1]) - X(cs.bracket[0]), 6);
+  ctx.fillStyle = C.blue; ctx.fillRect(0, y0, X(t), 6);
+  ctx.beginPath(); ctx.arc(X(t), h / 2, 5, 0, 7);
+  ctx.fillStyle = C.ink; ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,.6)"; ctx.stroke();
+}
+
+// ---- 累積停等 (演算法同雲端判決: STOPPED 段 ∩ bracket, 截至目前時間) ----
+function overlapUpTo(t) {
+  const [bs, be] = cs.bracket;
+  let sum = 0;
+  for (const [s, e] of cs.stops) {
+    const hi = Math.min(e, be, t), lo = Math.max(s, bs);
+    if (hi > lo) sum += hi - lo;
+  }
+  return sum;
+}
+
+// ---- 流程圖展開 ----
+const btnFlow = document.getElementById("btnFlow");
+const flowPanel = document.getElementById("flowPanel");
+function setFlow(open) {
+  flowPanel.hidden = !open;
+  btnFlow.classList.toggle("open", open);
+  btnFlow.textContent = open ? "系統流程圖 ▴" : "系統流程圖 ▾";
+}
+btnFlow.onclick = () => setFlow(flowPanel.hidden);
+if (location.hash === "#flow") setFlow(true);
+
+// ---- 控制 ----
+const btnPlay = document.getElementById("btnPlay");
+// play() 回傳 promise: 快速連點時前一次 play 可能被 pause 中斷丟 AbortError, 吃掉即可
+btnPlay.onclick = () => { video.paused ? video.play().catch(() => {}) : video.pause(); };
+// 點影片本身 = 播放/暫停 (overlay canvas 為 pointer-events:none, 點擊會落到 video)
+video.addEventListener("click", () => btnPlay.onclick());
+// 聲音: 預設靜音 (自動播放政策也要求), 按鈕開關; 換案例沿用目前開關狀態
+const btnMute = document.getElementById("btnMute");
+btnMute.onclick = () => {
+  video.muted = !video.muted;
+  btnMute.textContent = video.muted ? "🔇 聲音" : "🔊 靜音";
+};
+video.addEventListener("play", () => btnPlay.textContent = "⏸ 暫停");
+video.addEventListener("pause", () => btnPlay.textContent = "▶ 播放");
+document.getElementById("btnPrev").onclick = () => { video.pause(); seekTo(video.currentTime - FRAME_DT); };
+document.getElementById("btnNext").onclick = () => { video.pause(); seekTo(video.currentTime + FRAME_DT); };
+document.getElementById("rate").onchange = e => video.playbackRate = parseFloat(e.target.value);
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "SELECT") return;
+  if (e.code === "Space") { e.preventDefault(); btnPlay.onclick(); }
+  if (e.code === "ArrowLeft") { e.preventDefault(); video.pause(); seekTo(video.currentTime - FRAME_DT); }
+  if (e.code === "ArrowRight") { e.preventDefault(); video.pause(); seekTo(video.currentTime + FRAME_DT); }
+});
+
+// ---- 影片 canvas 疊加: 停止標誌偵測框 (偵測點間線性內插) ----
+const rootScale = () => parseFloat(getComputedStyle(document.documentElement).fontSize) / 16;
+function stroke2(ctx, color, width, path) {
+  ctx.save(); ctx.lineJoin = "round";
+  ctx.beginPath(); path(ctx);
+  ctx.lineWidth = width + 2.4; ctx.strokeStyle = "rgba(0,0,0,.75)"; ctx.stroke();
+  ctx.lineWidth = width; ctx.strokeStyle = color; ctx.stroke();
+  ctx.restore();
+}
+function text2(ctx, str, x, y, color, font) {
+  ctx.save(); ctx.font = font || "bold 13px Consolas,monospace";
+  ctx.lineWidth = 3.5; ctx.strokeStyle = "rgba(0,0,0,.9)"; ctx.lineJoin = "round";
+  ctx.strokeText(str, x, y); ctx.fillStyle = color; ctx.fillText(str, x, y);
+  ctx.restore();
+}
+function boxAt(track, t) {
+  const d = track.d;
+  if (t < d[0][0] - 0.3 || t > d[d.length - 1][0] + 0.3) return null;
+  if (t <= d[0][0]) return d[0];
+  for (let i = 1; i < d.length; i++) {
+    if (t <= d[i][0]) {
+      const a = d[i - 1], b = d[i], gap = b[0] - a[0];
+      if (gap > 0.8) return (t - a[0] < 0.3) ? a : ((b[0] - t < 0.3) ? b : null);
+      const w = (t - a[0]) / gap;
+      return [t, a[1] + (b[1] - a[1]) * w, a[2] + (b[2] - a[2]) * w,
+                 a[3] + (b[3] - a[3]) * w, a[4] + (b[4] - a[4]) * w];
+    }
+  }
+  return d[d.length - 1];
+}
+function drawOverlay(t) {
+  const w = overlay.clientWidth, h = overlay.clientHeight;
+  if (overlay.width !== Math.round(w * devicePixelRatio)) {
+    overlay.width = w * devicePixelRatio; overlay.height = h * devicePixelRatio;
+  }
+  const ctx = overlay.getContext("2d");
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const sx = w / IMG_W, sy = h / IMG_H;
+  const sc = Math.max(1, w / 900);   // 影片放大時, 框線與標籤等比加粗放大
+  cs.signs.forEach(track => {
+    const b = boxAt(track, t);
+    if (!b) return;
+    const col = track.k === "floor" ? C.green : C.blue;
+    stroke2(ctx, col, 2.6 * sc, c => c.rect(b[1] * sx, b[2] * sy, (b[3] - b[1]) * sx, (b[4] - b[2]) * sy));
+    text2(ctx, track.k === "floor" ? "止まれ 標線" : "止まれ 立牌", b[1] * sx, b[2] * sy - 6 * sc, col,
+          "bold " + Math.round(13 * sc) + "px Consolas,monospace");
+  });
+}
+
+// ---- 圖表 ----
+function setupCanvas(cv) {
+  if (!cv.dataset.designH) cv.dataset.designH = cv.getAttribute("height");
+  // 高度跟著根字級縮放 (寬度由版面決定), 大螢幕上圖表等比放大不變扁
+  // 以「設計像素」作畫、context 乘上根字級倍率 rs——canvas 內固定 px 的字級/
+  // 座標跟著 2K/4K 的 rem 版面等比放大 (滑鼠座標換算處同步乘 rs)
+  const rs = rootScale();
+  const w = cv.clientWidth / rs, h = parseInt(cv.dataset.designH);
+  cv.width = cv.clientWidth * devicePixelRatio;
+  cv.height = Math.round(h * rs) * devicePixelRatio;
+  cv.style.height = Math.round(h * rs) + "px";
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(devicePixelRatio * rs, 0, 0, devicePixelRatio * rs, 0, 0);
+  return [ctx, w, h];
+}
+const xS = (t, w) => PAD.l + (t / cs.dur) * (w - PAD.l - PAD.r);
+
+function axis(ctx, w, h, yTicks, yFn, unit) {
+  ctx.strokeStyle = C.line; ctx.fillStyle = C.muted; ctx.font = "10px Consolas,monospace";
+  ctx.strokeRect(PAD.l, PAD.t, w - PAD.l - PAD.r, h - PAD.t - PAD.b);
+  yTicks.forEach(v => {
+    const yy = yFn(v);
+    ctx.globalAlpha = .3;
+    ctx.beginPath(); ctx.moveTo(PAD.l, yy); ctx.lineTo(w - PAD.r, yy); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillText(String(v) + (unit || ""), 3, yy + 3);
+  });
+  const step = cs.dur > 25 ? 5 : 2;
+  for (let s = 0; s <= Math.floor(cs.dur); s += step)
+    ctx.fillText(s + "s", xS(s, w) - 6, h - 5);
+}
+
+function drawCharts() {
+  // thumbmode (封面截圖) 下圖表區 display:none、canvas 尺寸為 0——
+  // getImageData(0,0) 會拋錯中斷後續 HUD/儀表, 直接跳過
+  if (document.body.classList.contains("thumbmode")) return;
+  chartCache = [];
+  const [bs, be] = cs.bracket;
+
+  // -- 時間軸 --
+  {
+    const [ctx, w, h] = setupCanvas(cvTimeline);
+    ctx.clearRect(0, 0, w, h);
+    // 第一列 MOTION 同時畫 SLOW(橘, 底) 與 STOPPED(紅, 上) — 展示三態狀態機的輸出
+    const rows = [["stops", "MOTION", C.danger], ["floor", "FLOOR", C.green], ["pole", "POLE", C.blue]];
+    const rowH = (h - PAD.t - PAD.b) / rows.length;
+    // bracket 底 + 黃框
+    ctx.fillStyle = "rgba(251,191,36,.10)";
+    ctx.fillRect(xS(bs, w), PAD.t, xS(be, w) - xS(bs, w), h - PAD.t - PAD.b);
+    ctx.strokeStyle = C.warn; ctx.lineWidth = 2;
+    [[bs, 1], [be, -1]].forEach(([t, dir]) => {
+      const x = xS(t, w);
+      ctx.beginPath();
+      ctx.moveTo(x + 5 * dir, PAD.t); ctx.lineTo(x, PAD.t);
+      ctx.lineTo(x, h - PAD.b); ctx.lineTo(x + 5 * dir, h - PAD.b);
+      ctx.stroke();
+    });
+    ctx.lineWidth = 1;
+    rows.forEach(([key, label, col], i) => {
+      const y0 = PAD.t + i * rowH + 3, hh = rowH - 6;
+      ctx.fillStyle = "rgba(148,163,184,.12)";
+      ctx.fillRect(PAD.l, y0, w - PAD.l - PAD.r, hh);
+      if (key === "stops") {   // SLOW 先畫 (橘), STOPPED 蓋在上面 (紅)
+        ctx.fillStyle = C.warn;
+        cs.slows.forEach(([s, e]) => ctx.fillRect(xS(s, w), y0, Math.max(2, xS(e, w) - xS(s, w)), hh));
+      }
+      ctx.fillStyle = col;
+      cs[key].forEach(([s, e]) => ctx.fillRect(xS(s, w), y0, Math.max(2, xS(e, w) - xS(s, w)), hh));
+      ctx.font = "bold 10px Consolas,monospace";
+      ctx.fillStyle = C.muted;
+      ctx.fillText(label, 3, y0 + hh / 2 + 3.5);
+    });
+    // 時間刻度
+    ctx.fillStyle = C.muted; ctx.font = "10px Consolas,monospace";
+    const step = cs.dur > 25 ? 5 : 2;
+    for (let s = 0; s <= Math.floor(cs.dur); s += step)
+      ctx.fillText(s + "s", xS(s, w) - 6, h - 5);
+    chartCache.push([cvTimeline, ctx.getImageData(0, 0, cvTimeline.width, cvTimeline.height)]);
+  }
+
+  // -- radial --
+  {
+    const [ctx, w, h] = setupCanvas(cvRadial);
+    ctx.clearRect(0, 0, w, h);
+    const yMax = 4;
+    const y = v => PAD.t + (1 - Math.min(v, yMax) / yMax) * (h - PAD.t - PAD.b);
+    // 狀態底色
+    cs.frames.forEach((f, i) => {
+      if (f[1] === 0) return;
+      const x0 = xS(f[0], w);
+      const x1 = i + 1 < cs.frames.length ? xS(cs.frames[i + 1][0], w) : x0 + 2;
+      ctx.fillStyle = f[1] === 2 ? "rgba(248,113,113,.20)" : "rgba(251,191,36,.12)";
+      ctx.fillRect(x0, PAD.t, x1 - x0, h - PAD.t - PAD.b);
+    });
+    axis(ctx, w, h, [0, 1, 2, 3, 4], y);
+    // 門檻線
+    [[R_STOP, "靜止候選 < " + R_STOP, C.danger], [R_MOVE, "移動 > " + R_MOVE, C.blue]].forEach(([v, label, col]) => {
+      ctx.strokeStyle = col; ctx.setLineDash([5, 5]); ctx.globalAlpha = .8;
+      ctx.beginPath(); ctx.moveTo(PAD.l, y(v)); ctx.lineTo(w - PAD.r, y(v)); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha = 1;
+      ctx.fillStyle = col; ctx.font = "10px Consolas,monospace";
+      ctx.fillText(label, w - PAD.r - 110, y(v) - 4);
+    });
+    // radial 折線
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 1.7; ctx.beginPath();
+    cs.frames.forEach((f, i) => {
+      const px = xS(f[0], w), py = y(f[2]);
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    });
+    ctx.stroke(); ctx.lineWidth = 1;
+    chartCache.push([cvRadial, ctx.getImageData(0, 0, cvRadial.width, cvRadial.height)]);
+  }
+
+  // -- 累積停等 --
+  {
+    const [ctx, w, h] = setupCanvas(cvOverlapC);
+    ctx.clearRect(0, 0, w, h);
+    const yMax = Math.max(1, Math.ceil(cs.overlap * 1.3 * 2) / 2);
+    const y = v => PAD.t + (1 - Math.min(v, yMax) / yMax) * (h - PAD.t - PAD.b);
+    axis(ctx, w, h, yMax > 2 ? [0, 1, 2, yMax] : [0, 0.5, 1], y, "s");
+    // 門檻
+    ctx.strokeStyle = C.warn; ctx.setLineDash([5, 5]);
+    ctx.beginPath(); ctx.moveTo(PAD.l, y(THRESHOLD)); ctx.lineTo(w - PAD.r, y(THRESHOLD)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = C.warn; ctx.font = "bold 10px Consolas,monospace";
+    ctx.fillText("門檻 " + THRESHOLD + "s", w - PAD.r - 70, y(THRESHOLD) - 4);
+    // 曲線 (每幀取樣)
+    ctx.strokeStyle = C.green; ctx.lineWidth = 2; ctx.beginPath();
+    cs.frames.forEach((f, i) => {
+      const px = xS(f[0], w), py = y(overlapUpTo(f[0]));
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    });
+    ctx.stroke(); ctx.lineWidth = 1;
+    // 終值標註
+    ctx.fillStyle = cs.overlap > THRESHOLD ? C.green : C.danger;
+    ctx.font = "bold 11px Consolas,monospace";
+    ctx.fillText("最終 " + cs.overlap.toFixed(3) + "s → " + cs.verdict,
+                 Math.min(xS(cs.dur, w) - 150, w - 170), y(cs.overlap) - 6);
+    chartCache.push([cvOverlapC, ctx.getImageData(0, 0, cvOverlapC.width, cvOverlapC.height)]);
+  }
+
+  // 點擊/拖曳 seek
+  [cvTimeline, cvRadial, cvOverlapC].forEach(cv => {
+    const seekFromEvent = e => {
+      const rect = cv.getBoundingClientRect();
+      const rs = rootScale();
+      const frac = (e.clientX - rect.left - PAD.l * rs) / (rect.width - (PAD.l + PAD.r) * rs);
+      seekTo(Math.max(0, Math.min(1, frac)) * cs.dur);
+    };
+    cv.onpointerdown = e => {
+      e.preventDefault(); cv.setPointerCapture(e.pointerId);
+      cv._drag = true; video.pause(); seekFromEvent(e);
+    };
+    cv.onpointermove = e => { if (cv._drag) seekFromEvent(e); };
+    cv.onpointerup = cv.onpointercancel = () => { cv._drag = false; };
+  });
+}
+
+function drawCursors(t) {
+  chartCache.forEach(([cv, img]) => {
+    const ctx = cv.getContext("2d");
+    ctx.putImageData(img, 0, 0);
+    const rs = rootScale();
+    ctx.setTransform(devicePixelRatio * rs, 0, 0, devicePixelRatio * rs, 0, 0);
+    const w = cv.clientWidth / rs, h = parseInt(cv.dataset.designH);
+    const x = xS(Math.max(0, Math.min(cs.dur, t)), w);
+    ctx.strokeStyle = C.ink; ctx.globalAlpha = .85;
+    ctx.beginPath(); ctx.moveTo(x, PAD.t); ctx.lineTo(x, h - PAD.b); ctx.stroke();
+    ctx.globalAlpha = 1;
+  });
+}
+
+// ---- 主迴圈 ----
+let lastFrame = -1;
+function tick() {
+  const t = video.currentTime;
+  const fi = frameAt(t);
+  const f = cs.frames[fi];
+  if (fi !== lastFrame) {
+    lastFrame = fi;
+    hudState.textContent = STATE_NAME[f[1]];
+    hudState.className = "st-" + STATE_NAME[f[1]];
+  }
+  const ov = overlapUpTo(t);
+  hudOverlap.textContent = ov.toFixed(3) + " s";
+  hudOverlap.className = "num" + (ov > THRESHOLD ? " pass" : "");
+  drawOverlay(t);
+  drawScrub(t);
+  drawCursors(t);
+  document.getElementById("timeLabel").textContent =
+    "t=" + t.toFixed(2) + "s｜幀 " + (fi + 1) + "/" + cs.frames.length +
+    "｜radial " + f[2].toFixed(2);
+  requestAnimationFrame(tick);
+}
+
+window.addEventListener("resize", () => { drawCharts(); });
+selectCase(0, false);
+// 網址 #t=秒數 → 開頁直接跳到該時刻 (分享/驗證特定瞬間用)
+// ---- 下滑凍結 (pip): 影片大半捲出視窗後, 固定成右上角小窗續播 ----
+// 占位 div 撐住原本版位 (版面不跳動); 觸發只看占位 div 的幾何, 不會回饋循環
+{
+  const wrap = document.querySelector(".videoWrap");
+  const ph = document.createElement("div");
+  wrap.parentNode.insertBefore(ph, wrap);
+  // pip: 迷你時間軸移進小窗底部 (原位留錨點); 固定右下角, 不可移動——
+  // 會擋內容時用「右滑收合」即可 (2026-09-04 使用者定案, 移除上/下檔位)
+  const scrubHome = document.createElement("span");
+  scrub.before(scrubHome);
+  // 右滑收合 (本次瀏覽記住); 收合即暫停, 展開不自動播放
+  let pipCollapsed = false;
+  const pipTab = document.createElement("button");
+  pipTab.className = "pipTab";
+  pipTab.textContent = "◀ 影片";
+  pipTab.hidden = true;
+  document.body.appendChild(pipTab);
+  // 左上尺寸切換 (標準/70%, localStorage 記住) + 右上提示
+  const pipCtl = document.createElement("button");
+  pipCtl.className = "pipCtl";
+  pipCtl.title = "切換小窗尺寸";
+  const pipHint = document.createElement("div");
+  pipHint.className = "pipHint";
+  pipHint.textContent = "→ 右滑可隱藏";
+  document.body.append(pipCtl, pipHint);   // 常駐貼在小窗上緣外側 (wrap overflow:hidden 放不了)
+  function placeHint() {
+    // 不用 getBoundingClientRect 的水平位置——展開動畫中 transform 會把它量到畫面外;
+    // 小窗固定右下 .6rem, 位置可直接算 (高度不受 translateX 影響)
+    if (!pipHint.classList.contains("on")) return;
+    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    const r = wrap.getBoundingClientRect();     // width/height 不受 translateX 影響
+    pipHint.style.right = (0.6 * rem) + "px";
+    pipHint.style.bottom = (0.6 * rem + r.height) + "px";
+    pipCtl.style.left = (innerWidth - 0.6 * rem - r.width) + "px";
+    pipCtl.style.bottom = (0.6 * rem + r.height) + "px";
+  }
+  addEventListener("resize", placeHint);
+  const PIP_SIZE = "showcasePipSize";
+  const getSize = () => { try { return localStorage.getItem(PIP_SIZE) || "l"; } catch (e) { return "l"; } };
+  const setSize = v => { try { localStorage.setItem(PIP_SIZE, v); } catch (e) {} };
+  function applySize() {
+    const sm = getSize() === "s";
+    wrap.classList.toggle("small", sm);
+    pipCtl.textContent = sm ? "⤢ 放大" : "⤡ 縮小";
+    placeHint();
+  }
+  pipCtl.onclick = e => { e.stopPropagation(); setSize(getSize() === "s" ? "l" : "s"); applySize(); };
+  function collapsePip() {
+    pipCollapsed = true; video.pause();
+    wrap.style.transform = "";
+    wrap.classList.add("pipmin");
+    pipTab.hidden = false;
+    pipHint.classList.remove("on"); pipCtl.classList.remove("on");
+  }
+  pipTab.onclick = () => {               // 展開: 不自動播放
+    pipCollapsed = false;
+    wrap.classList.remove("pipmin");
+    pipTab.hidden = true;
+    pipHint.classList.add("on"); pipCtl.classList.add("on");
+    placeHint();
+  };
+  // 原位快照: pip 觸發時把當下影格(含演算法疊框)畫進占位 div——原位不再是空洞,
+  // 視覺上與小窗並存; 點快照平滑捲回原位 (pip 會自動解除)
+  const snapGhost = document.createElement("div");
+  snapGhost.className = "pipGhost";
+  snapGhost.title = "點擊回到影片原位";
+  const snapCv = document.createElement("canvas");
+  const snapLbl = document.createElement("div");
+  snapLbl.textContent = "▶ 影片固定於右下角續播——點擊回到原位";
+  snapGhost.append(snapCv, snapLbl);
+  snapGhost.onclick = () =>
+    scrollTo({ top: ph.getBoundingClientRect().top + scrollY - 8, behavior: "smooth" });
+  function pipEnter() {
+    wrap.appendChild(scrub);
+    try {
+      snapCv.width = video.videoWidth || 1280;
+      snapCv.height = video.videoHeight || 720;
+      const g = snapCv.getContext("2d");
+      g.drawImage(video, 0, 0, snapCv.width, snapCv.height);
+      const ov = document.getElementById("overlay");
+      if (ov) g.drawImage(ov, 0, 0, snapCv.width, snapCv.height);
+    } catch (e) {}
+    ph.appendChild(snapGhost);
+    if (!pipCollapsed) { pipHint.classList.add("on"); pipCtl.classList.add("on"); }
+    applySize();
+    if (pipCollapsed) {           // 收合狀態下重新進 pip: 直接以按鈕出現, 不播滑出動畫
+      wrap.style.transition = "none";
+      wrap.classList.add("pipmin"); pipTab.hidden = false; video.pause();
+      void wrap.offsetWidth;
+      wrap.style.transition = "";
+    }
+  }
+  function pipExit() {
+    scrubHome.after(scrub);
+    snapGhost.remove();
+    wrap.classList.remove("pipmin"); pipTab.hidden = true;
+    pipHint.classList.remove("on"); pipCtl.classList.remove("on");
+    wrap.style.transform = "";
+  }
+  // 唯一手勢: 往右拖 (dx>8px 才算), 超過 40% 寬放開 = 收合, 否則彈回
+  let pipDrag = false, pipMoved = false, pipX0 = 0;
+  wrap.addEventListener("pointerdown", e => {
+    if (!wrap.classList.contains("pip") || wrap.classList.contains("pipmin") || e.target === scrub || e.target === pipCtl) return;
+    pipDrag = true; pipMoved = false; pipX0 = e.clientX;
+  });
+  addEventListener("pointermove", e => {
+    if (!pipDrag) return;
+    const dx = e.clientX - pipX0;
+    if (!pipMoved && dx < 8) return;
+    pipMoved = true;
+    wrap.style.transition = pipCtl.style.transition = "none";
+    const t = dx > 0 ? "translateX(" + dx + "px)" : "";
+    wrap.style.transform = t;
+    pipCtl.style.transform = t;   // 左上尺寸鈕跟著滑 (右滑提示已貼右緣, 不動)
+  });
+  addEventListener("pointerup", e => {
+    if (!pipDrag) return; pipDrag = false;
+    if (!pipMoved) return;
+    wrap.style.transition = ""; pipCtl.style.transition = "transform .25s";
+    pipCtl.style.transform = "";
+    // 門檻只需防「點暫停時手滑」——40px 已遠大於點擊抖動 (拖曳判定 8px)
+    if (e.clientX - pipX0 > 40) collapsePip();
+    else wrap.style.transform = "";
+  });
+  wrap.addEventListener("click", e => {   // 拖曳結束的 click 不觸發影片播放
+    if (pipMoved) { e.stopPropagation(); e.preventDefault(); pipMoved = false; }
+  }, true);
+  const updatePip = () => {
+    if (document.body.classList.contains("thumbmode")) return;
+    const on = wrap.classList.contains("pip");
+    const h = on ? parseFloat(ph.style.height) : wrap.offsetHeight;
+    const top = ph.getBoundingClientRect().top;
+    if (!on && top < -h * 0.6) { ph.style.height = h + "px"; wrap.classList.add("pip"); pipEnter(); }
+    else if (on && top > -h * 0.5) { wrap.classList.remove("pip"); ph.style.height = "0"; pipExit(); }
+  };
+  addEventListener("scroll", updatePip, { passive: true });
+  addEventListener("resize", updatePip);
+  updatePip();   // 開頁若已捲在下方 (重新整理保留捲動位置), 立即進入 pip
+}
+
+
+// ---- 圖表置頂 (📌): 點了把該圖移到最上、再點一次恢復預設 ----
+(function () {
+  const KEY = "showcasePinnedChart";
+  let memPin = null;   // localStorage 不可用 (部分瀏覽器 file://) 時的頁內備援
+  const getPin = () => { try { return localStorage.getItem(KEY); } catch (e) { return memPin; } };
+  const setPin = v => { memPin = v;
+    try { v == null ? localStorage.removeItem(KEY) : localStorage.setItem(KEY, v); } catch (e) {} };
+  const charts = [...document.querySelectorAll(".chart")];
+  if (!charts.length) return;
+  const parent = charts[0].parentElement;
+  const defaultOrder = charts.slice();
+  const keyOf = d => { const c = d.querySelector("canvas"); return c ? c.id : null; };
+  function apply() {
+    const pin = getPin();
+    defaultOrder.forEach(d => parent.appendChild(d));   // 先恢復預設順序
+    const pinned = charts.find(d => keyOf(d) === pin);
+    if (pinned && pinned !== defaultOrder[0]) parent.insertBefore(pinned, defaultOrder[0]);
+    charts.forEach(d => {
+      const b = d.querySelector(".pinBtn"), on = keyOf(d) === pin;
+      b.classList.toggle("active", on);
+      b.textContent = on ? "📌 已置頂" : "📌";
+    });
+  }
+  charts.forEach(d => {
+    const btn = document.createElement("button");
+    btn.className = "pinBtn";
+    btn.title = "把這張圖移到最上面（跨案例、跨分頁記憶；再點一次恢復預設）";
+    btn.onclick = () => { setPin(getPin() === keyOf(d) ? null : keyOf(d)); apply(); };
+    d.querySelector("h4").prepend(btn);
+  });
+  apply();
+})();
+
+if (location.hash.includes("thumb")) document.body.classList.add("thumbmode");
+const mC = location.hash.match(/c=(\d+)/);   // #c=N 直接切到第 N 個案例 (封面截圖用)
+if (mC) selectCase(+mC[1] - 1, false);
+const mT = location.hash.match(/t=([\d.]+)/);
+if (mT) {
+  video.autoplay = false;   // 否則 pause 後 autoplay 仍可能在 canplay 時把影片播起來
+  video.addEventListener("loadedmetadata", () => {
+    video.pause(); seekTo(parseFloat(mT[1]));
+  }, { once: true });
+}
+requestAnimationFrame(tick);
+
+// ---- 懸浮提示引擎: fixed 定位夾住視窗邊界, 上方放不下自動翻下方 ----
+const tipbox = document.createElement("div");
+tipbox.id = "tipbox";
+document.body.appendChild(tipbox);
+let tipAnchor = null;
+function placeTip() {
+  if (!tipAnchor) return;
+  const r = tipAnchor.getBoundingClientRect(), m = 8, gap = 9;
+  const tw = tipbox.offsetWidth, th = tipbox.offsetHeight;
+  const x = Math.max(m, Math.min(r.left + r.width / 2 - tw / 2, innerWidth - m - tw));
+  const below = r.top - th - gap < m;
+  const y = below ? Math.min(r.bottom + gap, innerHeight - m - th) : r.top - th - gap;
+  tipbox.classList.toggle("below", below);
+  tipbox.style.setProperty("--ax",
+    Math.max(12, Math.min(r.left + r.width / 2 - x, tw - 12)) + "px");
+  tipbox.style.left = x + "px"; tipbox.style.top = y + "px";
+}
+function showTip(el) {
+  tipAnchor = el; tipbox.textContent = el.dataset.tip;
+  tipbox.style.display = "block"; placeTip();
+}
+function hideTip() { tipAnchor = null; tipbox.style.display = "none"; }
+document.addEventListener("mouseover", e => {
+  const el = e.target.closest("[data-tip]");
+  if (el !== tipAnchor) el ? showTip(el) : hideTip();
+});
+document.documentElement.addEventListener("mouseleave", hideTip);
+addEventListener("scroll", placeTip, true);
+addEventListener("resize", placeTip);
+// 版面驗證用: #tipdebug=N 直接展開第 N 個提示 (供截圖檢查, 不影響一般瀏覽)
+const tipDbg = location.hash.match(/tipdebug=(\d+)/);
+if (tipDbg) {
+  const els = document.querySelectorAll("[data-tip]");
+  const el = els[Math.min(+tipDbg[1], els.length - 1)];
+  el.scrollIntoView({ block: "center" });
+  setTimeout(() => showTip(el), 300);
+}
+</script>
+</body>
+</html>

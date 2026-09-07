@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>行車安全 AI 演算法・互動可視化</title>
+<style>
+  :root {
+    --bg: #0f172a; --card: #1e293b; --line: #334155;
+    --text: #e2e8f0; --muted: #94a3b8;
+    --blue: #38bdf8; --green: #34d399; --warn: #fbbf24; --danger: #f87171;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: clamp(15px, 0.52vw + 6px, 26px); }
+  body {
+    font-family: "Noto Sans TC", "Microsoft JhengHei", -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 82rem; margin: 0 auto; padding: 3.2rem 1.5rem 5rem; }
+
+  .hero { margin-bottom: 2.4rem; max-width: 60em; }
+  .hero h1 {
+    font-size: 2.1rem; font-weight: 800; letter-spacing: .5px; line-height: 1.3;
+    background: linear-gradient(90deg, var(--blue), var(--green));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero .sub { color: var(--muted); margin-top: .7rem; font-size: 1rem; }
+  .hero .sub b { color: var(--text); }
+  .hero-badges { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+  .hb { font-size: .8rem; font-weight: 700; padding: .24rem .8rem; border-radius: 999px;
+    border: 1px solid rgba(52,211,153,.4); color: var(--green); background: rgba(52,211,153,.07); }
+
+  /* 卡片網格: auto-fit 讓第 4/5 張卡自動換行排版 */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(21rem, 1fr)); gap: 1.2rem; }
+  .card {
+    display: flex; flex-direction: column; text-decoration: none; color: inherit;
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    overflow: hidden; transition: transform .18s, border-color .18s, box-shadow .18s;
+  }
+  .card:hover { transform: translateY(-4px); border-color: var(--blue);
+    box-shadow: 0 14px 40px rgba(0,0,0,.45); }
+  .thumb { position: relative; aspect-ratio: 16/9; background: #000; overflow: hidden; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block;
+    transition: transform .3s; }
+  .card:hover .thumb img { transform: scale(1.04); }
+
+  .body { padding: .95rem 1.2rem 1.1rem; display: flex; flex-direction: column; gap: .55rem; flex: 1; }
+  .card h2 { font-size: 1.15rem; font-weight: 800; }
+  .card h2 .go { color: var(--blue); font-weight: 800; margin-left: .35rem;
+    display: inline-block; transition: transform .18s; }
+  .card:hover h2 .go { transform: translateX(4px); }
+  .big { border-left: 3px solid var(--warn); padding-left: .7rem; }
+  .big .bv { display: block; font-weight: 800; font-size: 1.02rem; color: var(--warn); }
+  .big .bk { display: block; font-size: .78rem; color: var(--muted); }
+  .hook { color: var(--muted); font-size: .86rem; }
+  .tags { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: auto; padding-top: .3rem; }
+  .tag { font-size: .72rem; font-weight: 700; padding: .12rem .6rem; border-radius: 999px;
+    color: var(--blue); border: 1px solid rgba(56,189,248,.35); background: rgba(56,189,248,.06); }
+
+  footer { margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1.2rem;
+    color: var(--muted); font-size: .84rem; }
+
+  @media (max-width: 760px) {
+    .wrap { padding: 1.6rem .9rem 3rem; }
+    .hero h1 { font-size: 1.5rem; }
+    .grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <h1>行車安全 AI：演算法實戰互動展示</h1>
+    <p class="sub">商用車隊的行車記錄器結合車上 AI，即時偵測<b>接近碰撞、危險駕駛、違規未停、持續壓線與超速</b>等事件。
+    每一頁展示一套<b>實際上線的演算法</b>：以真實道路事件的影片與逐幀數據，
+    在網頁上重現演算法的每一步判斷——可播放、可逐幀、可拖曳驗證。</p>
+    <div class="hero-badges">
+      <span class="hb">真實道路事件</span>
+      <span class="hb">演算法逐幀即時重現</span>
+      <span class="hb">影像・慣性訊號・道路圖資皆有題材</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <a class="card" href="harsh_driving.html">
+      <div class="thumb">
+        <img src="assets/videos/harsh_driving/cover.jpg" alt="急駕駛事件偵測 演算法畫面" loading="lazy">
+      </div>
+      <div class="body">
+        <h2>急駕駛事件偵測<span class="go">→</span></h2>
+        <div class="big"><span class="bv">偵測急煞車、急加速、急轉彎等危險駕駛行為</span><span class="bk">EMA 安靜基線＋最佳單調段＋淨轉向特徵，參數化決策樹分類</span></div>
+        <p class="hook">車機從 15 秒慣性訊號窗即時萃取特徵並分類。人工標記 150 筆：Precision 98.5%、Recall 94.3%。</p>
+        <div class="tags"><span class="tag">IMU 訊號處理</span><span class="tag">EMA 濾波</span><span class="tag">單調性分析</span><span class="tag">參數化決策樹</span></div>
+      </div>
+    </a>
+    <a class="card" href="near_collision.html">
+      <div class="thumb">
+        <img src="assets/videos/near_collision/cover.jpg" alt="接近碰撞偵測 演算法畫面" loading="lazy">
+      </div>
+      <div class="body">
+        <h2>接近碰撞偵測<span class="go">→</span></h2>
+        <div class="big"><span class="bv">偵測「差點追撞前車」的驚險瞬間</span><span class="bk">魚眼校正＋單目測距＋手刻卡爾曼濾波，1 顆鏡頭不需雷達</span></div>
+        <p class="hook">急煞觸發後即時解出前車距離與接近率，四條件判定碰撞風險——全程車機端運算，明確人工預期 9/9 判對。</p>
+        <div class="tags"><span class="tag">卡爾曼濾波</span><span class="tag">單目測距</span><span class="tag">魚眼校正</span><span class="tag">消失點自適應 ROI</span></div>
+      </div>
+    </a>
+    <a class="card" href="rolling_stop_jp.html">
+      <div class="thumb">
+        <img src="assets/videos/rolling_stop_jp/cover.jpg" alt="停止標誌未停讓偵測 演算法畫面" loading="lazy">
+      </div>
+      <div class="body">
+        <h2>停止標誌未停讓偵測<span class="go">→</span></h2>
+        <div class="big"><span class="bv">從影像直接判讀車輛行進或靜止</span><span class="bk">Phase Correlation 24 FPS 逐幀分析，全程不依賴 GPS</span></div>
+        <p class="hook">日本法規要求於「止まれ」標誌前完全靜止。演算法直接從影像量出靜止秒數，Precision 95.2%、車機誤報攔截 98%。</p>
+        <div class="tags"><span class="tag">Phase Correlation</span><span class="tag">網格位移場</span><span class="tag">三態狀態機</span><span class="tag">AWS Lambda</span></div>
+      </div>
+    </a>
+    <a class="card" href="sustained_speeding.html">
+      <div class="thumb">
+        <img src="assets/videos/sustained_speeding/cover.jpg" alt="持續超速偵測 演算法畫面" loading="lazy">
+      </div>
+      <div class="body">
+        <h2>持續超速偵測<span class="go">→</span></h2>
+        <div class="big"><span class="bv">比對道路圖資速限，偵測長時間超速</span><span class="bk">GPS 兩階段圖資匹配＋影像市區/快速道路判別＋30 秒持續視窗</span></div>
+        <p class="hook">工程級逐點回放：一段 9 分鐘行程內兩次超速，每一次圖磚查詢、道路匹配與速限決策都能重播對質；上線誤判率 1.9%。</p>
+        <div class="tags"><span class="tag">道路圖資匹配</span><span class="tag">R-tree 空間索引</span><span class="tag">點到折線幾何距離</span><span class="tag">速限遲滯</span></div>
+      </div>
+    </a>
+    <a class="card" href="lane_straddling.html">
+      <div class="thumb">
+        <img src="assets/videos/lane_straddling/cover.jpg" alt="持續壓線偵測 演算法畫面" loading="lazy">
+      </div>
+      <div class="body">
+        <h2>持續壓線偵測<span class="go">→</span></h2>
+        <div class="big"><span class="bv">偵測長時間騎在車道線上的行駛行為</span><span class="bk">原創 min-AR 曲線法：從虛線框的形狀直接量出壓線秒數</span></div>
+        <p class="hook">彎道、壓線方向、GPS 可信度三重守門；289 段測資逐段人工標記：觸發 7/7 全真、彎道誤判 2/2 攔截。</p>
+        <div class="tags"><span class="tag">min-AR 曲線法</span><span class="tag">零相位雙向 EMA</span><span class="tag">彎道誤判守門</span><span class="tag">GPS 可信度指紋</span></div>
+      </div>
+    </a>
+  </div>
+
+  <footer>
+    所有影片皆為實際道路事件，封面與頁內的偵測框、儀表、數據皆為演算法輸出由網頁繪製；客戶名稱與車輛資訊已匿名化處理。
+  </footer>
+
+</div>
+</body>
+</html>

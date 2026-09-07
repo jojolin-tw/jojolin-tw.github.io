@@ -1,0 +1,1423 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>分頁 01｜急駕駛事件偵測——慣性訊號處理互動可視化</title>
+<style>
+  :root {
+    --bg: #0f172a; --card: #1e293b; --panel: #16233a; --line: #334155;
+    --text: #e2e8f0; --muted: #94a3b8;
+    --blue: #38bdf8; --green: #34d399; --warn: #fbbf24; --danger: #f87171;
+    --cyan: #22d3ee; --orange: #fb923c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; font-size: clamp(15px, 0.52vw + 6px, 26px); }
+  body {
+    font-family: "Noto Sans TC", "Microsoft JhengHei", -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text);
+    line-height: 1.7; -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--blue); }
+  .mono { font-family: Consolas, "Cascadia Mono", monospace; }
+  .wrap { max-width: 88rem; margin: 0 auto; padding: 1.1rem 1.5rem 6rem; }
+
+  .topbar { display: flex; align-items: center; gap: .9rem; margin-bottom: 1.3rem; }
+  .back {
+    display: inline-flex; align-items: center; gap: .5rem;
+    color: var(--muted); text-decoration: none; font-size: .92rem;
+    border: 1px solid var(--line); border-radius: 999px; padding: .4rem 1rem;
+    transition: color .15s, border-color .15s;
+  }
+  .back:hover { color: var(--text); border-color: var(--muted); }
+  .page-tag {
+    font-size: .8rem; font-weight: 700; letter-spacing: 1.5px;
+    color: var(--blue); background: rgba(56,189,248,.12);
+    border-radius: 999px; padding: .3rem .9rem;
+  }
+  .flow-btn {
+    display: inline-flex; align-items: center; gap: .4rem;
+    background: none; color: var(--muted); font: inherit; font-size: .92rem;
+    border: 1px solid var(--line); border-radius: 999px; padding: .4rem 1rem; cursor: pointer;
+    transition: color .15s, border-color .15s;
+  }
+  .flow-btn:hover { color: var(--text); border-color: var(--muted); }
+  .flow-btn.open { color: var(--blue); border-color: rgba(56,189,248,.5); }
+  .flowpanel {
+    border: 1px solid var(--line); border-radius: 14px; background: var(--card);
+    padding: .9rem 1rem .3rem; margin-bottom: 1.3rem; overflow-x: auto;
+  }
+  .flowpanel svg { min-width: 1020px; width: 100%; display: block; }
+  .flowpanel .fp-note { color: var(--muted); font-size: .8rem; padding: .4rem .2rem .6rem; }
+
+  .hero { margin-bottom: 1.2rem; }
+  .hero h1 {
+    font-size: 1.8rem; font-weight: 800; letter-spacing: .5px; line-height: 1.35;
+    background: linear-gradient(90deg, var(--blue), var(--green));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero .sub { color: var(--muted); margin-top: .4rem; font-size: .95rem; }
+  .hero .sub b { color: var(--text); }
+  .hero-chips { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .8rem; }
+  .hchip { font-size: .78rem; font-weight: 700; padding: .22rem .75rem; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+  .hchip.m { color: var(--blue); border-color: rgba(56,189,248,.4); background: rgba(56,189,248,.07); }
+  .hchip.r { color: var(--green); border-color: rgba(52,211,153,.4); background: rgba(52,211,153,.07); }
+  .hchip[data-tip]:hover { filter: brightness(1.25); }
+
+  /* 懸浮提示: 單一 #tipbox 由 JS 定位 (position:fixed 不受任何 overflow 容器裁切;
+     夾住視窗左右緣、上方放不下自動翻下方) */
+  [data-tip] { cursor: help; }
+  #tipbox {
+    position: fixed; left: 0; top: 0; display: none; z-index: 999; pointer-events: none;
+    background: #0b1324; color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: .5rem .8rem;
+    font-size: .78rem; font-weight: 400; line-height: 1.55; text-align: left;
+    width: max-content; max-width: min(22rem, 92vw); white-space: normal;
+    box-shadow: 0 8px 24px rgba(0,0,0,.55);
+  }
+  #tipbox::after {
+    content: ""; position: absolute; top: 100%; left: var(--ax, 50%); margin-left: -.32rem;
+    border: .32rem solid transparent; border-top-color: var(--line);
+  }
+  #tipbox.below::after { top: auto; bottom: 100%;
+    border-top-color: transparent; border-bottom-color: var(--line); }
+
+  /* #thumb 模式: 只留影片區滿版, 供主頁截取「含演算法疊加繪製」的封面 */
+  body.thumbmode .wrap > :not(.theater) { display: none; }
+  body.thumbmode .theater > :not(.stage) { display: none; }
+  body.thumbmode .stage > :not(.videoWrap) { display: none; }
+  body.thumbmode .wrap { max-width: none; padding: 0; }
+  body.thumbmode .theater { display: block; margin: 0; gap: 0; }
+  body.thumbmode .videoWrap { border-radius: 0; border: none; }
+
+  /* ===== 第一屏 ===== */
+  .theater {
+    display: grid; gap: 1.1rem; align-items: start;
+    grid-template-columns: minmax(0, 2.3fr) minmax(19rem, 1fr);
+    grid-template-areas: "video sidebar" "charts sidebar";
+    margin-bottom: 3.4rem;
+  }
+  .sidebar { grid-area: sidebar; display: flex; flex-direction: column; gap: 1.1rem; min-width: 0; }
+  .stage { grid-area: video; min-width: 0; }
+  .videoWrap {
+    position: relative; background: #000; border: 1px solid var(--line);
+    border-radius: 14px; overflow: hidden; aspect-ratio: 16/9;
+  }
+  .videoWrap video { position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; }
+  .hud { position: absolute; font-family: Consolas, monospace; font-weight: 700;
+    padding: .25rem .7rem; border-radius: 8px; font-size: .92rem;
+    background: rgba(10,15,28,.72); border: 1px solid rgba(148,163,184,.35);
+    backdrop-filter: blur(2px); }
+  .hud-speed { top: .7rem; left: .7rem; }
+  .hud-speed .num { font-size: 1.25rem; color: var(--green); }
+  .hud-speed .num.hot { color: var(--danger); }
+  .hud-speed .lbl { color: var(--muted); font-size: .72rem; font-weight: 400; display: block; }
+  .hud-verdict { top: .7rem; right: .7rem; }
+  .hud-verdict .st-hit { color: var(--danger); }
+  .hud-live { bottom: .7rem; left: .7rem; display: flex; align-items: center; gap: .45rem;
+    font-size: .78rem; color: var(--green); }
+  .hud-live .dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--green);
+    animation: livepulse 1.6s ease-in-out infinite; }
+  @keyframes livepulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+  /* 右下角遙測儀表: G 力計(量值) + 航向儀(yaw) */
+  .meters {
+    position: absolute; right: .7rem; bottom: .7rem;
+    display: flex; gap: .55rem; pointer-events: none;
+  }
+  .meters canvas { width: 7.8rem; height: 7.8rem; }
+
+  /* 下滑凍結: 影片大半捲出視窗頂端後, 固定成右上角小窗續播 (pip 類由頁尾 JS 掛上) */
+  .videoWrap.pip {
+    position: fixed; bottom: .6rem; right: .6rem; width: min(54rem, 72vw);
+    z-index: 940; box-shadow: 0 14px 44px rgba(0,0,0,.65); cursor: grab;
+  }
+  .videoWrap.pip .hud, .videoWrap.pip .meters { zoom: .85; }
+  @media (max-width: 760px) { .videoWrap.pip { width: 92vw; } }
+  /* pip 內的迷你時間軸: 疊在小窗底部, 不用捲回原位也能拖曳跳時間 */
+  /* 明確覆蓋 .videoWrap canvas 通則 (inset:0 / pointer-events:none), 否則
+     scrub 會貼到小窗頂端且不能拖 (急駕駛頁沒有該通則, 其他三頁有) */
+  .videoWrap.pip #scrub { position: absolute; left: 0; right: 0; bottom: 0;
+    top: auto; width: 100%; margin: 0; height: 1.35rem; z-index: 3;
+    pointer-events: auto; background: rgba(10,15,28,.55); }
+  /* 右滑收合: 小窗滑出右緣, 留一顆側邊按鈕; 展開不自動播放 */
+  .videoWrap.pip { transition: transform .25s; }
+  .videoWrap.pip.pipmin { transform: translateX(calc(100% + 1rem)); }
+  .pipTab {
+    position: fixed; right: 0; bottom: 3rem; z-index: 941; writing-mode: vertical-rl;
+    padding: .8rem .3rem; font: inherit; font-size: .85rem; letter-spacing: 3px;
+    color: var(--text); background: var(--card); border: 1px solid var(--line);
+    border-right: none; border-radius: 10px 0 0 10px; cursor: pointer;
+    box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  }
+  .pipTab:hover { color: var(--blue); border-color: var(--muted); }
+  /* 原位快照 (pip 時占位 div 內的凍結畫格) */
+  .pipGhost { position: relative; width: 100%; height: 100%; border-radius: 14px;
+    overflow: hidden; cursor: pointer; border: 1px dashed var(--line); }
+  .pipGhost canvas { width: 100%; height: 100%; display: block; opacity: .35; }
+  .pipGhost div { position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; color: var(--muted); font-size: .95rem; text-shadow: 0 1px 6px #000; }
+  .pipGhost:hover div { color: var(--text); }
+  /* pip 控制: 左上尺寸切換 (hover 浮現)、右上「右滑可隱藏」提示 (首次自動示 3 秒) */
+  /* 小窗上緣外側的小舌片: 左=尺寸切換鈕、右=右滑提示 (同款設計) */
+  .pipCtl, .pipHint { display: none; }
+  .pipCtl.on, .pipHint.on {
+    display: block; position: fixed; z-index: 941;
+    background: rgba(10,15,28,.85); border: 1px solid var(--line);
+    border-radius: 8px 8px 0 0; border-bottom: none; padding: .18rem .6rem;
+    font-size: .74rem;
+  }
+  .pipHint.on { color: var(--muted); pointer-events: none; }
+  .pipCtl.on { color: var(--text); font-family: inherit; cursor: pointer; }
+  .pipCtl.on:hover { color: var(--blue); border-color: var(--muted); }
+  /* 兩種尺寸: 標準 / 70% */
+  .videoWrap.pip.small { width: min(37.8rem, 50.4vw); }
+  .videoWrap.pip.small .hud { zoom: .7; }
+  .videoWrap.pip.small .meters { zoom: .7; }
+  @media (max-width: 760px) { .videoWrap.pip.small { width: 70vw; } }
+  .videoWrap.pip .hud-live { bottom: 1.75rem; }
+  .videoWrap.pip .meters { bottom: 1.75rem; }
+
+  /* 圖表置頂鈕 (📌): 點了把該圖移到最上, localStorage 跨案例/跨分頁記憶 */
+  .pinBtn { background: var(--panel); color: var(--muted); border: 1px solid var(--line);
+    border-radius: 6px; padding: 0 .5rem; margin-right: .5rem; cursor: pointer;
+    font-size: .72rem; line-height: 1.7; vertical-align: 2px; font-family: inherit; }
+  .pinBtn:hover { color: var(--text); border-color: var(--muted); }
+  .pinBtn.active { background: var(--blue); color: #0b1324; border-color: var(--blue); font-weight: 700; }
+
+  /* 影片正下方的迷你時間軸: 不用捲到曲線區就能拖曳 */
+  #scrub { width: 100%; height: 1.15rem; display: block; margin-top: .45rem;
+    cursor: ew-resize; touch-action: none; }
+
+  .controls { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-top: .3rem; }
+  .controls button {
+    background: var(--card); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: .28rem .8rem; cursor: pointer; font: inherit; font-size: .88rem;
+  }
+  .controls button:hover { border-color: var(--muted); }
+  .controls select { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: .2rem .3rem; font: inherit; font-size: .85rem; }
+  .controls .time { color: var(--muted); font-size: .82rem; min-width: 11.5rem; }
+  .controls .hint { color: var(--muted); font-size: .78rem; }
+  kbd { background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 0 .35rem; font-size: .75rem; }
+
+  .charts { grid-area: charts; display: flex; flex-direction: column; gap: .6rem; margin-top: .6rem; min-width: 0; }
+  .chart { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: .55rem .7rem .3rem; }
+  .chart h4 { font-size: .8rem; color: var(--muted); font-weight: 700; margin-bottom: .15rem; }
+  .chart h4 b { color: var(--text); }
+  .chart canvas { width: 100%; display: block; cursor: ew-resize; touch-action: none; }
+
+  .verdict-panel {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; padding: 1rem 1.25rem;
+  }
+  .vp-top { display: flex; align-items: center; gap: .9rem; flex-wrap: wrap; }
+  .vp-badge { font-weight: 800; font-size: .95rem; padding: .2rem 1rem; border-radius: 999px; }
+  .vp-badge.violation { background: rgba(248,113,113,.16); color: var(--danger); border: 1px solid rgba(248,113,113,.5); }
+  .vp-stmt { font-weight: 800; font-size: 1.02rem; letter-spacing: .3px; }
+  .vp-title { font-weight: 700; margin-top: .6rem; }
+  .vp-desc { color: var(--muted); font-size: .92rem; margin-top: .3rem; }
+  .vp-meta { color: var(--muted); font-size: .84rem; margin-top: .6rem; }
+
+  .playlist { display: flex; flex-direction: column; gap: .75rem; min-width: 0; }
+  .pl-head { font-size: .82rem; font-weight: 700; letter-spacing: 1px; color: var(--muted); }
+  .pl-item {
+    display: grid; grid-template-columns: 7.25rem minmax(0, 1fr); gap: .75rem; align-items: center;
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: .6rem; cursor: pointer; text-align: left; color: inherit; font: inherit;
+    transition: border-color .15s, transform .15s;
+  }
+  .pl-item:hover { border-color: var(--muted); transform: translateY(-1px); }
+  .pl-item.active { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue) inset; }
+  .pl-item img { width: 7.25rem; border-radius: 8px; display: block; background: #000; }
+  .pl-info { min-width: 0; }
+  .pl-sec { font-weight: 800; font-size: .95rem; }
+  .pl-badge { font-size: .72rem; font-weight: 800; padding: 1px .55rem; border-radius: 999px; margin-left: .5rem; vertical-align: 1px; white-space: nowrap; display: inline-block; }
+  .pl-badge.violation { background: rgba(248,113,113,.16); color: var(--danger); }
+  .pl-title { color: var(--muted); font-size: .82rem; margin-top: .15rem;
+    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+  /* ===== 說明區 ===== */
+  section.block { margin-bottom: 3.4rem; }
+  section.block > h2 { font-size: 1.35rem; font-weight: 800; margin-bottom: .3rem; }
+  section.block > .lead { color: var(--muted); margin-bottom: 1.1rem; max-width: 56em; }
+  section.block > .lead b { color: var(--text); }
+
+  .pipeline { display: flex; align-items: stretch; }
+  .pnode {
+    flex: 1; background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: .9rem 1.1rem; min-width: 0;
+  }
+  .pnode .pn-step { font-size: .72rem; font-weight: 800; letter-spacing: 1.2px; margin-bottom: .3rem; }
+  .pnode.edge .pn-step { color: var(--blue); }
+  .pnode.cloud .pn-step { color: var(--green); }
+  .pnode.final .pn-step { color: var(--warn); }
+  .pnode .pn-title { font-weight: 800; font-size: .98rem; }
+  .pnode .pn-sub { color: var(--muted); font-size: .84rem; margin-top: .3rem; }
+  .pnode .pn-sub b { color: var(--text); }
+  .parrow { display: flex; align-items: center; padding: 0 .45rem; color: var(--muted); }
+  .parrow::before { content: "→"; font-size: 1.25rem; }
+
+  .keynote {
+    border: 1px solid var(--warn); border-radius: 14px; margin-top: 1rem;
+    background: linear-gradient(135deg, rgba(251,191,36,.1), rgba(251,191,36,.02));
+    padding: 1rem 1.3rem;
+  }
+  .keynote p { font-size: .93rem; }
+  .keynote p b { color: var(--warn); }
+  code { background: rgba(15,23,42,.8); padding: 1px .45rem; border-radius: 5px;
+    font-family: Consolas, monospace; font-size: .88em; color: var(--warn); }
+
+  /* 決策樹條件面板 (跟著上方選的案例連動) */
+  .decision { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1rem 1.25rem; }
+  .dc-head { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; margin-bottom: .7rem; }
+  .dc-head .dc-case { font-weight: 800; }
+  .dc-head .dc-note { color: var(--muted); font-size: .84rem; }
+  .dc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .9rem; }
+  .dc-branch { border: 1px solid var(--line); border-radius: 10px; padding: .7rem .9rem; }
+  .dc-branch.win { border-color: rgba(248,113,113,.55); background: rgba(248,113,113,.05); }
+  .dc-branch h5 { font-size: .85rem; margin-bottom: .4rem; }
+  .dc-branch h5 .tag { font-size: .72rem; font-weight: 800; padding: 1px .5rem; border-radius: 999px;
+    background: rgba(248,113,113,.16); color: var(--danger); margin-left: .5rem; }
+  .dc-row { display: flex; justify-content: space-between; gap: .6rem; font-size: .85rem;
+    padding: .18rem 0; border-bottom: 1px dashed rgba(51,65,85,.6); }
+  .dc-row:last-child { border-bottom: none; }
+  .dc-row .dv { font-family: Consolas, monospace; }
+  .dc-row .ok { color: var(--green); font-weight: 800; }
+  .dc-row .no { color: var(--muted); }
+  .dc-final { margin-top: .8rem; font-size: .95rem; font-weight: 800; }
+  .dc-final b { color: var(--danger); }
+
+  .algo-list { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+  .algo-item {
+    display: grid; grid-template-columns: 10.5rem minmax(0, 1fr); gap: .8rem; align-items: baseline;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: .7rem 1rem;
+  }
+  .ai-term { font-weight: 800; font-size: .9rem; color: var(--blue); }
+  .ai-desc { color: var(--muted); font-size: .88rem; }
+  .param {
+    border-radius: 12px; padding: .9rem 1.2rem; margin-top: .8rem;
+    border-left: 4px solid var(--green); background: rgba(52,211,153,.07);
+    font-size: .92rem;
+  }
+  .param b { color: var(--text); }
+  .param .ph { font-weight: 800; }
+  .param .pd { color: var(--muted); margin-top: .15rem; }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: .9rem; margin-bottom: 1.1rem; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: .95rem 1.25rem; }
+  .stat .sv { font-size: 1.9rem; font-weight: 800; color: var(--green); line-height: 1.2; }
+  .stat .sv span { font-size: .95rem; color: var(--muted); font-weight: 400; margin-left: 2px; }
+  .stat .sk { font-size: .84rem; color: var(--muted); margin-top: .25rem; }
+  /* 驗證表格 (與 N3S 頁同款) */
+  .vtable-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--card); margin-top: .8rem; }
+  .vtable-wrap table { width: 100%; border-collapse: collapse; font-size: .9rem; min-width: 40rem; }
+  .vtable-wrap th, .vtable-wrap td { padding: .6rem .9rem; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  .vtable-wrap th:first-child, .vtable-wrap td:first-child { text-align: left; }
+  .vtable-wrap th { color: var(--muted); font-weight: 700; font-size: .82rem; }
+  .vtable-wrap tr:last-child td { border-bottom: none; }
+  .vtable-wrap td.hl { color: var(--green); font-weight: 800; }
+  .tfoot-note { color: var(--muted); font-size: .85rem; margin-top: .6rem; line-height: 1.7; }
+  .body-note { margin-top: 1.1rem; font-size: .94rem; max-width: 56em; }
+  .body-note b { color: var(--warn); }
+
+  footer { border-top: 1px solid var(--line); padding-top: 1.2rem; color: var(--muted); font-size: .84rem; }
+
+  @media (max-width: 760px) {
+    .wrap { padding: .8rem .9rem 4rem; }
+    .hero h1 { font-size: 1.32rem; }
+    .hero .sub { font-size: .9rem; }
+    .hchip.m { display: none; }
+    .theater {
+      grid-template-columns: 1fr;
+      grid-template-areas: "video" "sidebar" "charts";
+      gap: .8rem;
+    }
+    .sidebar { gap: .8rem; }
+    .playlist { flex-direction: row; overflow-x: auto; padding-bottom: .3rem; }
+    .pl-head { display: none; }
+    .pl-item { flex: 0 0 15.5rem; grid-template-columns: 5.2rem minmax(0, 1fr); padding: .5rem; }
+    .pl-item img { width: 5.2rem; }
+    .pl-title { -webkit-line-clamp: 3; font-size: .78rem; }
+    .hud { font-size: .78rem; padding: .18rem .5rem; }
+    .hud-speed .num { font-size: 1rem; }
+    .hud-speed .lbl { display: none; }
+    .meters canvas { width: 4.6rem; height: 4.6rem; }
+    .meters { gap: .35rem; }
+    .controls .hint { display: none; }
+    .pipeline { flex-direction: column; }
+    .parrow { justify-content: center; padding: .15rem 0; }
+    .parrow::before { content: "↓"; }
+    .algo-list { grid-template-columns: 1fr; }
+    .algo-item { grid-template-columns: 1fr; gap: .1rem; }
+    .stats { grid-template-columns: 1fr; }
+    .dc-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <a class="back" href="index.html">← 返回主頁</a>
+    <span class="page-tag">分頁 01</span>
+    <button id="btnFlow" class="flow-btn" type="button">系統流程圖 ▾</button>
+  </div>
+
+  <div id="flowPanel" class="flowpanel" hidden>
+    <svg viewBox="0 0 1180 400" xmlns="http://www.w3.org/2000/svg" font-family="'Noto Sans TC','Microsoft JhengHei',sans-serif">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0L10 5L0 10z" fill="#94a3b8"/>
+        </marker>
+      </defs>
+      <rect x="20" y="30" width="1140" height="120" rx="12" fill="rgba(56,189,248,.05)" stroke="#334155"/>
+      <text x="36" y="54" fill="#38bdf8" font-size="12.5" font-weight="800" letter-spacing="1.5">觸發與收窗（車機端）</text>
+      <rect x="40" y="66" width="330" height="66" rx="8" fill="#0f172a" stroke="#334155"/>
+      <text x="205" y="93" fill="#e2e8f0" font-size="12.5" font-weight="700" text-anchor="middle">IMU 水平合力連續 3 點超過門檻 → 觸發</text>
+      <text x="205" y="112" fill="#94a3b8" font-size="10.5" text-anchor="middle">√(accX²+accY²) &gt; 2.8 m/s²・去除重力軸</text>
+      <rect x="430" y="66" width="330" height="66" rx="8" fill="#0f172a" stroke="#334155"/>
+      <text x="595" y="93" fill="#e2e8f0" font-size="12.5" font-weight="700" text-anchor="middle">收 15 秒感測窗（觸發前 10s＋後 5s）</text>
+      <text x="595" y="112" fill="#94a3b8" font-size="10.5" text-anchor="middle">加速度 xyz・陀螺儀・yaw・GPS 速度，約 5 Hz</text>
+      <rect x="820" y="66" width="320" height="66" rx="8" fill="#0f172a" stroke="#334155"/>
+      <text x="980" y="93" fill="#e2e8f0" font-size="12.5" font-weight="700" text-anchor="middle">GPS 品質修正</text>
+      <text x="980" y="112" fill="#94a3b8" font-size="10.5" text-anchor="middle">失效(-1) 與真停車(0.0) 分開處理，失效段不參與判斷</text>
+      <path d="M370 99 L426 99" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+      <path d="M760 99 L816 99" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+
+      <rect x="20" y="172" width="1140" height="210" rx="12" fill="rgba(52,211,153,.05)" stroke="#334155"/>
+      <text x="36" y="196" fill="#34d399" font-size="12.5" font-weight="800" letter-spacing="1.5">訊號特徵與決策樹（本頁重現的部分）</text>
+      <rect x="40" y="210" width="330" height="66" rx="8" fill="#0f172a" stroke="#38bdf8"/>
+      <text x="205" y="237" fill="#38bdf8" font-size="12.5" font-weight="700" text-anchor="middle">嚴重度＝峰值 − EMA 安靜基線</text>
+      <text x="205" y="256" fill="#94a3b8" font-size="10.5" text-anchor="middle">連續三點平均峰值・因果 EMA (α=0.05) 取觸發前 2s</text>
+      <rect x="430" y="210" width="330" height="66" rx="8" fill="#0f172a" stroke="#38bdf8"/>
+      <text x="595" y="237" fill="#38bdf8" font-size="12.5" font-weight="700" text-anchor="middle">速度特徵：最佳單調段淨幅</text>
+      <text x="595" y="256" fill="#94a3b8" font-size="10.5" text-anchor="middle">每秒去重・容平台微抖・GPS 失效段重置</text>
+      <rect x="820" y="210" width="320" height="66" rx="8" fill="#0f172a" stroke="#38bdf8"/>
+      <text x="980" y="237" fill="#38bdf8" font-size="12.5" font-weight="700" text-anchor="middle">轉彎特徵：淨轉向＋角速度</text>
+      <text x="980" y="256" fill="#94a3b8" font-size="10.5" text-anchor="middle">yaw unwrap＋平滑・|net|/(pos+neg) 比例濾抖動</text>
+
+      <rect x="240" y="302" width="450" height="64" rx="8" fill="#0f172a" stroke="#fbbf24"/>
+      <text x="465" y="328" fill="#fbbf24" font-size="12.5" font-weight="700" text-anchor="middle">決策樹（車機上即時執行）：轉彎四關卡優先 → 速度兩候選各自過關</text>
+      <text x="465" y="347" fill="#94a3b8" font-size="10.5" text-anchor="middle">每關卡＝實測值 vs 門檻，全程可解釋、可逐案覆核</text>
+      <rect x="740" y="302" width="180" height="28" rx="8" fill="rgba(248,113,113,.1)" stroke="#f87171"/>
+      <text x="830" y="321" fill="#f87171" font-size="12" font-weight="700" text-anchor="middle">急煞／急加速／急轉彎</text>
+      <rect x="740" y="338" width="180" height="28" rx="8" fill="rgba(52,211,153,.1)" stroke="#34d399"/>
+      <text x="830" y="357" fill="#34d399" font-size="12" font-weight="700" text-anchor="middle">不成立 → 過濾不上報</text>
+      <path d="M205 276 L205 334 L236 334" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+      <path d="M595 276 L595 298" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+      <path d="M980 276 L980 334 L924 334" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+      <path d="M690 318 L736 316" stroke="#f87171" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+      <path d="M690 350 L736 352" stroke="#34d399" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
+    </svg>
+    <div class="fp-note">整套判定在車機上即時完成；本頁逐點重現每一步判斷。</div>
+  </div>
+
+  <header class="hero">
+    <h1>急駕駛事件偵測：從慣性訊號還原危險駕駛的瞬間</h1>
+    <p class="sub">車隊要管理的是<b>急煞車、急加速、急轉彎</b>等危險駕駛行為。
+    車輛的 <b>IMU（慣性感測器）</b>每秒回報約 5 次加速度與航向，這套演算法從
+    15 秒的訊號窗萃取三組特徵——<b>嚴重度</b>（峰值減去 EMA 安靜基線）、<b>速度淨幅</b>（最佳單調段）、
+    <b>淨轉向</b>（平滑後航向差）——再交給參數化決策樹分類成急煞車／急加速／急轉彎。
+    下方是<b>可互動的演算法重現</b>：影片、G 力計、航向儀、逐幀訊號即時同步。</p>
+    <div class="hero-chips">
+      <span class="hchip m" data-tip="因果單向 EMA（α=0.05、前 5 點平均開局抗離群起點），取觸發前 2 秒的值當「事件前安靜基準」——嚴重度量的是相對高度，顛簸路面的常態震動不會虛報">EMA 安靜基線</span>
+      <span class="hchip m" data-tip="峰值＝窗內「連續三點平均」取最大那組——要求震動持續半秒以上，單幀雜訊尖刺再高也不會被當成峰值">連續三點平均峰值</span>
+      <span class="hchip m" data-tip="速度淨幅＝窗內「最佳單調段」頭尾差：每秒去重、容忍 1 m/s 平台微抖、GPS 失效段切斷重算——比「最大速差」更貼近人對急煞的直覺">最佳單調段速度分析</span>
+      <span class="hchip m" data-tip="航向角在 ±180° 會環繞跳變，先 unwrap 解開再中心移動平均平滑；淨轉向看頭尾差、|net|/(pos+neg) 比例把左右抖動濾掉">yaw unwrap＋平滑</span>
+      <span class="hchip m" data-tip="GPS 失效（值=-1）與真停車（0.0）嚴格分開：失效段不參與判斷、單調段跨失效區直接重置——低速時 GPS 誤差與車速同量級，這是必要防線">GPS 失效防護</span>
+      <span class="hchip m" data-tip="門檻全部做成 per-client 參數（嚴重度三門檻/速度淨幅/轉向區間/角速度區間/初末速上限），不同車隊特性可獨立調校而不動演算法">參數化決策樹</span>
+      <span class="hchip r" data-tip="嚴重度 ≥3.5（客戶上線參數）母體分層抽樣＋最嚴重補充，150 筆逐筆人工標記（盲測——標記時不顯示演算法判定）：Precision 98.5%、Recall 94.3%（主力車隊）——詳見頁尾驗證章節">人工標記 P 98.5%・R 94.3%</span>
+      <span class="hchip r" data-tip="以物理指紋規則逐筆標籤的子集：537 筆急轉彎中 181 筆「左右擺動大、淨轉向≈0」的路面抖動，被淨轉向法 181/181 全數過濾；272 筆乾淨轉彎保留 271 筆">抖動誤判過濾 181/181</span>
+    </div>
+  </header>
+
+  <!-- ===== 第一屏 ===== -->
+  <div class="theater">
+    <div class="stage">
+      <div class="videoWrap">
+        <video id="main-video" muted playsinline loop autoplay preload="auto"></video>
+        <div class="hud hud-speed" data-tip="上：IMU 水平加速度合力（紅=超過車機觸發門檻 2.8 m/s²）；下：GPS 速度">
+          <span id="hud-acc" class="num">— m/s²</span>
+          <span class="lbl" id="hud-spd">速度 —</span>
+        </div>
+        <div class="hud hud-verdict" data-tip="決策樹分類結果，於觸發時刻浮出"><span id="hud-verdict" class="st-hit"></span></div>
+        <div class="hud hud-live" data-tip="儀表與下方曲線都由網頁以感測資料即時繪製、與影片同步（非預錄字幕）。左：水平加速度合力大小（演算法判定用的就是合力——IMU 安裝方向逐車不同，方向不可靠、量值可靠）。右：航向儀，由 yaw 顯示相對片頭的轉向角（羅盤慣例，右轉為正）"><span class="dot"></span><span id="hud-frame">車機演算法重現</span></div>
+        <div class="meters"><canvas id="gmag"></canvas><canvas id="ghead"></canvas></div>
+      </div>
+      <canvas id="scrub"></canvas>
+      <div class="controls">
+        <button id="btnPlay">⏸ 暫停</button>
+        <button id="btnMute">🔇 聲音</button>
+        <button id="btnPrev">◀ 上一點</button>
+        <button id="btnNext">下一點 ▶</button>
+        <label style="color:var(--muted);font-size:.85rem">速度
+          <select id="rate"><option>0.25</option><option>0.5</option><option selected>1</option><option>2</option></select>
+        </label>
+        <span class="time mono" id="timeLabel">--</span>
+        <span class="hint"><kbd>空白</kbd> 播放｜<kbd>←</kbd><kbd>→</kbd> 逐點｜圖表可點擊、拖曳跳轉</span>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="playlist">
+        <div class="pl-head">判定範例（點選切換）</div>
+      <button class="pl-item" type="button">
+        <img src="assets/videos/harsh_driving/case1.jpg" alt="範例1 縮圖" loading="lazy">
+        <span class="pl-info">
+          <span class="pl-sec">減速 7.8 m/s<span class="pl-badge violation">急煞車成立</span></span>
+          <span class="pl-title">急煞到完全靜止——2 秒內時速下降 28 公里</span>
+        </span>
+      </button>
+      <button class="pl-item" type="button">
+        <img src="assets/videos/harsh_driving/case2.jpg" alt="範例2 縮圖" loading="lazy">
+        <span class="pl-info">
+          <span class="pl-sec">減速 10.7 m/s<span class="pl-badge violation">急煞車成立</span></span>
+          <span class="pl-title">市區幹道重煞——時速 46 到 0、減速淨幅 10.66 m/s</span>
+        </span>
+      </button>
+      <button class="pl-item" type="button">
+        <img src="assets/videos/harsh_driving/case3.jpg" alt="範例3 縮圖" loading="lazy">
+        <span class="pl-info">
+          <span class="pl-sec">減速 6.5 m/s<span class="pl-badge violation">急煞車成立</span></span>
+          <span class="pl-title">市區路口急煞至靜止——嚴重度 7.14、單調減速 5 個台階</span>
+        </span>
+      </button>
+      <button class="pl-item" type="button">
+        <img src="assets/videos/harsh_driving/case4.jpg" alt="範例4 縮圖" loading="lazy">
+        <span class="pl-info">
+          <span class="pl-sec">轉向 51°<span class="pl-badge violation">急轉彎成立</span></span>
+          <span class="pl-title">夜間路口低速急轉——淨轉向 50.8°、角速度 20.7°/s</span>
+        </span>
+      </button>
+      <button class="pl-item" type="button">
+        <img src="assets/videos/harsh_driving/case5.jpg" alt="範例5 縮圖" loading="lazy">
+        <span class="pl-info">
+          <span class="pl-sec">轉向 41°<span class="pl-badge violation">急轉彎成立</span></span>
+          <span class="pl-title">急轉彎＋剎停——淨轉向 41°、角速度 19°/s</span>
+        </span>
+      </button>
+      <button class="pl-item" type="button">
+        <img src="assets/videos/harsh_driving/case6.jpg" alt="範例6 縮圖" loading="lazy">
+        <span class="pl-info">
+          <span class="pl-sec">轉向 79°<span class="pl-badge violation">急轉彎成立</span></span>
+          <span class="pl-title">山路彎道行進中急轉——淨轉向 78.9°、角速度 38.4°/s</span>
+        </span>
+      </button>
+      </div>
+      <div class="verdict-panel">
+        <div class="vp-top" data-tip="決策樹：轉彎四關卡（淨轉向∧嚴重度∧角速度∧末速）優先；不成立則急煞/急加速候選各自過三關（嚴重度∧淨幅∧初/末速）再擇一">
+          <span id="vp-badge" class="vp-badge"></span>
+          <span id="vp-stmt" class="vp-stmt"></span>
+        </div>
+        <div id="vp-title" class="vp-title"></div>
+        <p id="vp-desc" class="vp-desc"></p>
+        <div id="vp-meta" class="vp-meta"></div>
+      </div>
+    </div>
+
+    <div class="charts">
+      <div class="chart">
+        <h4><b>加速度合力</b> √(accX²+accY²)　青線＝EMA 安靜基線｜★＝連續三點平均峰值｜<span style="color:var(--danger)">嚴重度＝峰值−基線</span>｜紅帶＝峰值搜尋窗（T−2~+1s）</h4>
+        <canvas id="chartAcc" height="170"></canvas>
+      </div>
+      <div class="chart">
+        <h4><b>GPS 速度</b>　藍帶＝速度判斷窗（T−2~+4s）｜✕＝GPS 失效（不參與判斷）｜標註＝最佳單調段淨幅</h4>
+        <canvas id="chartSpd" height="135"></canvas>
+      </div>
+      <div class="chart">
+        <h4><b>yaw 航向角</b>　橘＝原始訊號（含抖動）｜藍＝unwrap＋平滑後｜綠帶＝轉彎判斷窗（T−3~+3s）｜淨轉向＝窗內頭尾差</h4>
+        <canvas id="chartYaw" height="150"></canvas>
+      </div>
+      <div class="chart">
+        <h4><b>角速度</b> |dyaw/dt|（平滑後）　急轉彎需介於 10~90 °/s——太小不是轉彎、太大是雜訊</h4>
+        <canvas id="chartDyaw" height="105"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 說明區 ===== -->
+  <section class="block">
+    <h2>解法：從一串加速度數字到「這是哪種危險駕駛」</h2>
+    <p class="lead">消費級 IMU 雜訊大、路面顛簸干擾強，單靠絕對門檻無法區分危險駕駛與顛簸。
+    這套管線的核心思想是：<b>每個特徵都相對於「事件前的自己」來量</b>——嚴重度相對安靜基線、
+    速度看單調段淨幅、轉向看平滑後頭尾差，再交給決策樹。</p>
+    <div class="pipeline">
+      <div class="pnode edge">
+        <div class="pn-step">觸發</div>
+        <div class="pn-title">IMU 門檻觸發</div>
+        <div class="pn-sub">水平合力連續 3 點 > 2.8 m/s²，收<b>觸發前 10s＋後 5s</b> 感測窗</div>
+      </div>
+      <div class="parrow"></div>
+      <div class="pnode edge">
+        <div class="pn-step">淨化</div>
+        <div class="pn-title">訊號前處理</div>
+        <div class="pn-sub">GPS 失效隔離・yaw unwrap＋平滑・<b>EMA 安靜基線</b></div>
+      </div>
+      <div class="parrow"></div>
+      <div class="pnode cloud">
+        <div class="pn-step">特徵</div>
+        <div class="pn-title">三組窗內特徵</div>
+        <div class="pn-sub">嚴重度（峰值−基線）・速度<b>最佳單調段</b>・淨轉向＋角速度</div>
+      </div>
+      <div class="parrow"></div>
+      <div class="pnode final">
+        <div class="pn-step">分類</div>
+        <div class="pn-title">決策樹</div>
+        <div class="pn-sub">轉彎四關卡優先 → 速度兩候選各自過關 → <b>急煞/急加速/急轉彎</b>，皆不成立則過濾</div>
+      </div>
+    </div>
+    <div class="keynote">
+      <p><b>可解釋是設計目標，不是副作用</b>：每一筆判定都能攤開成「實測值 vs 門檻」的關卡清單（見下方決策樹面板），
+      而所有門檻都做成 <code>per-client</code> 參數——物流車隊與計程車隊的駕駛型態不同，
+      各自調門檻即可，演算法本體一行不動。</p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>決策樹面板：這筆事件為什麼被判成這類</h2>
+    <p class="lead">與上方選擇的範例連動。左右兩欄是決策樹的兩條路：<b>轉彎關卡優先</b>，
+    全過即急轉彎；否則走速度分類。每一列都是「演算法實測值 vs 門檻」。</p>
+    <div class="decision" id="decisionPanel">
+      <div class="dc-head">
+        <span class="dc-case" id="dc-case"></span>
+        <span class="dc-note">數值皆為演算法重現輸出——判定本身在車機上即時完成</span>
+      </div>
+      <div class="dc-grid">
+        <div class="dc-branch" id="dc-turn"><h5>轉彎分類（四關卡全過才成立）</h5><div id="dc-turn-rows"></div></div>
+        <div class="dc-branch" id="dc-speed"><h5>速度分類（急煞候選）</h5><div id="dc-speed-rows"></div></div>
+      </div>
+      <div class="dc-final" id="dc-final"></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>訊號處理核心</h2>
+    <p class="lead">六個關鍵設計，把高雜訊的消費級感測訊號變成可判定的證據。</p>
+    <div class="algo-list">
+      <div class="algo-item"><span class="ai-term">EMA 因果基線</span>
+        <span class="ai-desc">α=0.05 強低通、前 5 點平均開局；取觸發前 2 秒的值＝事件前安靜基準，車機可即時計算</span></div>
+      <div class="algo-item"><span class="ai-term">連續三點平均峰值</span>
+        <span class="ai-desc">單點尖刺不算數，要連續三點都高才是真峰值——此改良救回 70 筆被誤殺的真實事件</span></div>
+      <div class="algo-item"><span class="ai-term">最佳單調段</span>
+        <span class="ai-desc">窗內找淨幅最大的連續減速/加速段：容平台微抖、真反向才斷、頭尾差計淨幅</span></div>
+      <div class="algo-item"><span class="ai-term">yaw unwrap＋平滑</span>
+        <span class="ai-desc">解 ±180° 環繞、中心移動平均；淨轉向/總轉量比例 ≥ 0.5 濾掉左右抖動</span></div>
+      <div class="algo-item"><span class="ai-term">GPS 失效隔離</span>
+        <span class="ai-desc">失效(-1) 與真停車(0.0) 分開；失效段切斷單調段、初末速只取有效幀</span></div>
+      <div class="algo-item"><span class="ai-term">初速/末速閘門</span>
+        <span class="ai-desc">窗邊緣 ±1 秒最低有效速：急煞要「真的剎到慢」、急加速要「從夠慢起步」才成立</span></div>
+    </div>
+    <div class="param">
+      <div class="ph">決策參數：全部 per-client 可調（嚴重度三門檻／速度淨幅／轉向與角速度區間／初末速上限）</div>
+      <div class="pd">同一套演算法服務不同型態的車隊：門檻放進設定檔逐客戶覆寫，
+      調整不需改碼、不需重新驗證演算法本體。<b>本頁所有窗與門檻的色帶、虛線都是實際參數值。</b></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>驗證：150 筆人工標記</h2>
+    <p class="lead">從<b>嚴重度 ≥ 3.5</b>（客戶實際採用的上線參數）的重判母體分層隨機抽樣，
+    加上按演算法判定挑出的最嚴重事件，共 <b>150 筆逐筆人工標記</b>——採盲測（標記時不顯示演算法判定），避免先入為主。</p>
+
+    <div class="stats">
+      <div class="stat" data-tip="母體＝四車隊 7 週、嚴重度 ≥3.5 的全部重判事件（862 筆），按車隊規模分層抽樣；另按演算法判定補入最嚴重事件"><div class="sv">150<span>筆</span></div><div class="sk">人工標記（嚴重度 ≥3.5 母體）</div></div>
+      <div class="stat" data-tip="上報側樣本 90 筆人工覆核 88 筆合理（含 8 筆輕微）、誤判僅 2 筆"><div class="sv">97.8<span>%</span></div><div class="sk">Precision——上報事件人工覆核（88/90）</div></div>
+      <div class="stat" data-tip="主力計程車隊，分層加權回推，95% 信賴區間 88.6~97.9%"><div class="sv">94.3<span>%</span></div><div class="sk">Recall——真實事件被留住（主力車隊）</div></div>
+    </div>
+
+    <div class="vtable-wrap">
+      <table>
+        <thead><tr><th>車隊</th><th>Precision（人工覆核）</th><th>Recall（分層回推，95% CI）</th></tr></thead>
+        <tbody>
+          <tr><td>客戶D（計程車隊）</td><td class="hl">66/67＝98.5%</td><td class="hl">94.3%［88.6~97.9］</td></tr>
+          <tr><td>客戶B（計程車隊）</td><td class="hl">16/16＝100%</td><td>74.2%［64.3~85.3］</td></tr>
+          <tr><td>客戶C（船運公司・大車）</td><td>6/7＝85.7%</td><td>未發現漏報（濾除側抽 28 筆、0 真實）</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="vtable-wrap">
+      <table>
+        <thead><tr><th>事件類型（上報側）</th><th>人工覆核合理</th></tr></thead>
+        <tbody>
+          <tr><td>急煞車</td><td class="hl">59/60</td></tr>
+          <tr><td>急轉彎</td><td class="hl">20/20</td></tr>
+          <tr><td>急加速</td><td class="hl">9/10</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="tfoot-note">標記三分法：真實（確實危險）／輕微（有該行為但未達危險程度——不算誤判、漏掉也無傷大雅）／誤判（顛簸雜訊）。
+    Precision 把輕微計為合理上報；Recall 只衡量「真實事件有沒有被留住」，輕微不列入漏報。母體＝車機已觸發的事件池。</p>
+  </section>
+
+  <footer>
+    本頁影片皆為實際道路事件；儀表與曲線為車機回傳的感測資料、判定為演算法重現輸出，由網頁即時繪製。客戶名稱與車輛資訊已匿名化處理。
+  </footer>
+
+</div>
+
+<script>
+"use strict";
+const CASES = [{"src": "assets/videos/harsh_driving/case1.mp4?v=1788503425", "poster": "assets/videos/harsh_driving/case1.jpg", "verdict": "急煞車成立", "cls": "violation", "stmt": "減速淨幅 7.75 m/s ≥ 4・嚴重度 5.82 ≥ 2.5・末速 0.0 < 5", "title": "急煞到完全靜止——2 秒內時速下降 28 公里", "desc": "前車突然停下，跟車緊急剎停：減速淨幅 7.75 m/s、嚴重度 5.82（門檻的兩倍以上），末速歸零。看加速度圖：青色 EMA 基線貼著事件前的安靜地板，嚴重度＝峰值與基線的高度差——不是絕對值，所以顛簸路面上的常態震動不會虛報。", "meta": "客戶B・車號尾碼 103・2026-05-27 12:54 (JST)", "dur": 15.0, "tTrig": 10.0, "vt": [0.199, 0.398, 0.599, 0.799, 0.998, 1.199, 1.399, 1.599, 1.801, 1.999, 2.201, 2.403, 2.599, 2.799, 3.001, 3.199, 3.399, 3.6, 3.801, 3.999, 4.2, 4.399, 4.599, 4.802, 5.0, 5.2, 5.4, 5.605, 5.801, 6.004, 6.2, 6.401, 6.602, 6.799, 7.004, 7.2, 7.4, 7.599, 7.801, 8.0, 8.204, 8.402, 8.6, 8.801, 9.002, 9.2, 9.401, 9.6, 9.802, 10.0, 10.2, 10.414, 10.6, 10.8, 11.001, 11.201, 11.401, 11.601, 11.803, 12.0, 12.2, 12.401, 12.602, 12.802, 13.001, 13.201, 13.401, 13.608, 13.801, 14.002, 14.202, 14.401, 14.605, 14.802, 15.002], "acc": [0.258, 0.288, 0.433, 0.476, 0.571, 0.359, 0.718, 0.368, 0.772, 1.111, 1.132, 1.063, 0.692, 0.294, 0.248, 0.523, 0.495, 0.926, 0.807, 0.779, 0.273, 0.453, 0.166, 0.464, 0.296, 0.365, 0.792, 0.996, 0.394, 0.41, 0.153, 0.321, 0.287, 0.746, 0.868, 0.888, 0.591, 0.578, 0.548, 0.765, 0.974, 0.342, 0.888, 1.424, 1.959, 2.553, 2.33, 3.34, 3.787, 4.385, 7.186, 6.949, 4.982, 0.984, 2.94, 0.433, 2.083, 0.811, 1.435, 1.002, 1.056, 1.013, 0.892, 0.624, 0.428, 0.245, 0.223, 0.096, 0.098, 0.069, 0.02, 0.038, 0.046, 0.056, 0.071], "ema": [0.405, 0.399, 0.401, 0.405, 0.413, 0.41, 0.426, 0.423, 0.44, 0.474, 0.507, 0.535, 0.542, 0.53, 0.516, 0.516, 0.515, 0.536, 0.549, 0.561, 0.546, 0.542, 0.523, 0.52, 0.509, 0.502, 0.516, 0.54, 0.533, 0.527, 0.508, 0.499, 0.488, 0.501, 0.519, 0.538, 0.54, 0.542, 0.543, 0.554, 0.575, 0.563, 0.579, 0.622, 0.688, 0.782, 0.859, 0.983, 1.123, 1.286, 1.581, 1.85, 2.006, 1.955, 2.005, 1.926, 1.934, 1.878, 1.856, 1.813, 1.775, 1.737, 1.695, 1.641, 1.58, 1.514, 1.449, 1.382, 1.317, 1.255, 1.193, 1.135, 1.081, 1.03, 0.982], "speed": [3.77, 3.77, 3.77, 6.74, 6.74, 6.74, 6.74, 6.74, 7.86, 7.86, 7.86, 7.86, 7.86, 8.35, 8.35, 8.35, 8.35, 8.35, 7.84, 7.84, 7.84, 7.84, 7.84, 5.76, 5.76, 5.76, 5.76, 5.76, null, null, null, null, null, 5.76, 5.76, 5.76, 5.76, 5.76, 7.75, 7.75, 7.75, 7.75, 7.75, 7.94, 7.94, 7.94, 7.94, 7.94, 7.94, 7.94, 7.94, 7.94, 7.94, 7.16, 7.16, 7.16, 7.16, 7.16, 5.55, 5.55, 5.55, 5.55, 5.55, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "spInv": [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false], "yawRaw": [-80.91, -81.15, -81.37, -81.57, -81.78, -82.01, -82.23, -82.41, -82.53, -82.64, -82.66, -82.67, -82.72, -82.72, -82.77, -82.83, -82.84, -82.92, -83.02, -83.16, -83.32, -83.45, -83.55, -83.55, -83.45, -83.36, -83.3, -83.16, -82.99, -82.87, -82.68, -82.44, -82.26, -82.07, -81.97, -81.91, -81.85, -81.85, -81.86, -81.93, -82.19, -82.52, -82.94, -83.36, -83.74, -84.1, -84.5, -84.88, -85.25, -85.64, -86.07, -85.77, -85.75, -85.71, -85.68, -85.66, -85.66, -85.65, -85.65, -85.64, -85.62, -85.61, -85.6, -85.52, -85.47, -85.43, -85.4, -85.38, -85.37, -85.35, -85.35, -85.35, -85.34, -85.34, -85.34], "yawSm": [-80.91, -81.14, -81.36, -81.58, -81.79, -82.0, -82.19, -82.36, -82.49, -82.58, -82.64, -82.68, -82.71, -82.74, -82.78, -82.82, -82.88, -82.95, -83.05, -83.17, -83.3, -83.4, -83.46, -83.47, -83.44, -83.36, -83.25, -83.14, -83.0, -82.83, -82.65, -82.46, -82.28, -82.13, -82.01, -81.93, -81.89, -81.88, -81.94, -82.07, -82.29, -82.59, -82.95, -83.33, -83.73, -84.12, -84.49, -84.87, -85.27, -85.52, -85.7, -85.79, -85.8, -85.71, -85.69, -85.67, -85.66, -85.65, -85.64, -85.63, -85.62, -85.6, -85.57, -85.53, -85.48, -85.44, -85.41, -85.38, -85.37, -85.36, -85.35, -85.35, -85.34, -85.34, -85.34], "dyawT": [0.199, 0.398, 0.599, 0.799, 0.998, 1.199, 1.399, 1.599, 1.801, 1.999, 2.201, 2.403, 2.599, 2.799, 3.001, 3.199, 3.399, 3.6, 3.801, 3.999, 4.2, 4.399, 4.599, 4.802, 5.0, 5.2, 5.4, 5.605, 5.801, 6.004, 6.2, 6.401, 6.602, 6.799, 7.004, 7.2, 7.4, 7.599, 7.801, 8.0, 8.204, 8.402, 8.6, 8.801, 9.002, 9.2, 9.401, 9.6, 9.802, 10.0, 10.2, 10.414, 10.6, 10.8, 11.001, 11.201, 11.401, 11.601, 11.803, 12.0, 12.2, 12.401, 12.602, 12.802, 13.001, 13.201, 13.401, 13.608, 13.801, 14.002, 14.202, 14.401, 14.605, 14.802, 15.002], "dyaw": [0.0, 1.19, 1.06, 1.1, 1.08, 1.04, 0.95, 0.86, 0.64, 0.44, 0.3, 0.19, 0.13, 0.17, 0.17, 0.2, 0.3, 0.39, 0.48, 0.61, 0.63, 0.53, 0.29, 0.05, 0.15, 0.39, 0.56, 0.57, 0.7, 0.84, 0.92, 0.91, 0.9, 0.78, 0.58, 0.41, 0.21, 0.04, 0.28, 0.68, 1.07, 1.52, 1.83, 1.9, 1.96, 1.96, 1.87, 1.91, 1.95, 1.28, 0.87, 0.43, 0.04, 0.41, 0.11, 0.1, 0.06, 0.04, 0.03, 0.05, 0.05, 0.12, 0.17, 0.2, 0.22, 0.22, 0.16, 0.11, 0.08, 0.05, 0.03, 0.02, 0.02, 0.01, 0.02], "thr": 2.8, "starT": 10.414, "starV": 6.37, "algo": {"genus": "HRB", "severity": 5.819, "peak_smooth": 6.372, "baseline": 0.554, "dec_amp": 7.75, "dec_steps": 6, "inc_amp": 0.0, "inc_steps": 0, "net_turn": -3.52, "yaw_rate": 1.96, "v_start": 5.76, "v_end": 0.0}, "cfg": {"severity_th": 2.5, "speed_window": [-2, 4], "min_net_decel": 4.0, "min_net_accel": 3.0, "max_end_speed_decel": 5.0, "max_start_speed_accel": 5.0, "turn_window": [-3, 3], "min_net_turn": 30.0, "max_net_turn": 360.0, "min_turn_rate": 10.0, "max_turn_rate": 90.0, "max_end_speed_turning": 10.0, "peak_win": [-2.0, 1.0], "yaw_smooth_window": 5}, "genus": "HRB", "genusZh": "急煞車"}, {"src": "assets/videos/harsh_driving/case2.mp4?v=1788503844", "poster": "assets/videos/harsh_driving/case2.jpg", "verdict": "急煞車成立", "cls": "violation", "stmt": "減速淨幅 10.66 m/s ≥ 4・嚴重度 7.63 ≥ 2.5・末速 0.0 < 5", "title": "市區幹道重煞——時速 46 到 0、減速淨幅 10.66 m/s", "desc": "傍晚市區幹道時速 46 公里逼近路口，重踩剎車停在斑馬線前：減速淨幅 10.66 m/s、嚴重度 7.63，皆為本頁最高。看加速度圖：峰值搜尋窗內連續 6 個秒級台階一路單調掉到零——單調性正是「真煞車」與「顛簸雜訊」最大的分野，路面顛簸的速度序列會上下跳動，湊不出這麼長的單調段。", "meta": "客戶B・車號尾碼 104・2026-05-20 17:13 (JST)", "dur": 15.0, "tTrig": 10.0, "vt": [0.199, 0.399, 0.598, 0.801, 0.999, 1.201, 1.402, 1.599, 1.801, 2.001, 2.2, 2.4, 2.604, 2.799, 3.0, 3.199, 3.401, 3.6, 3.8, 4.0, 4.2, 4.399, 4.6, 4.802, 5.001, 5.199, 5.4, 5.6, 5.8, 6.0, 6.2, 6.4, 6.6, 6.802, 7.001, 7.207, 7.401, 7.603, 7.802, 8.0, 8.2, 8.42, 8.602, 8.801, 9.002, 9.2, 9.401, 9.604, 9.801, 10.0, 10.201, 10.404, 10.601, 10.802, 11.001, 11.202, 11.402, 11.603, 11.802, 12.006, 12.203, 12.405, 12.602, 12.802, 13.001, 13.202, 13.404, 13.602, 13.802, 14.001, 14.202, 14.401, 14.603, 14.802, 15.002], "acc": [1.553, 1.452, 1.383, 0.514, 0.484, 0.959, 0.769, 1.001, 1.175, 1.233, 0.829, 0.761, 1.269, 0.75, 0.893, 1.091, 0.779, 1.04, 0.688, 0.715, 0.687, 0.706, 0.617, 0.731, 0.874, 0.851, 0.689, 0.815, 0.867, 0.721, 0.43, 0.415, 0.471, 0.468, 0.225, 0.355, 0.324, 0.243, 0.223, 0.121, 0.102, 0.04, 0.056, 0.04, 0.149, 0.145, 0.414, 3.143, 8.698, 9.128, 7.045, 4.635, 3.836, 3.483, 3.782, 3.574, 1.97, 1.418, 0.9, 3.31, 2.182, 2.058, 2.07, 1.976, 1.65, 1.738, 1.583, 1.023, 0.772, 0.453, 0.323, 0.22, 0.307, 0.047, 0.091], "ema": [1.077, 1.096, 1.11, 1.08, 1.05, 1.046, 1.032, 1.03, 1.038, 1.047, 1.037, 1.023, 1.035, 1.021, 1.014, 1.018, 1.006, 1.008, 0.992, 0.978, 0.964, 0.951, 0.934, 0.924, 0.921, 0.918, 0.906, 0.902, 0.9, 0.891, 0.868, 0.845, 0.827, 0.809, 0.78, 0.758, 0.737, 0.712, 0.688, 0.659, 0.631, 0.602, 0.574, 0.548, 0.528, 0.509, 0.504, 0.636, 1.039, 1.443, 1.724, 1.869, 1.967, 2.043, 2.13, 2.202, 2.191, 2.152, 2.09, 2.151, 2.152, 2.147, 2.144, 2.135, 2.111, 2.092, 2.067, 2.015, 1.952, 1.877, 1.8, 1.721, 1.65, 1.57, 1.496], "speed": [5.25, 5.25, 5.25, 5.25, 5.25, 6.38, 6.38, 6.38, 6.38, 6.38, 7.68, 7.68, 7.68, 7.68, 7.68, 10.0, 10.0, 10.0, 10.0, 10.0, 10.96, 10.96, 10.96, 10.96, 10.96, 12.11, 12.11, 12.11, 12.11, 12.11, 12.86, 12.86, 12.86, 12.86, 12.86, 12.9, 12.9, 12.9, 12.9, 12.9, 13.16, 13.16, 13.16, 13.16, 13.16, 13.21, 13.21, 13.21, 13.21, 13.21, 13.1, 13.1, 13.1, 13.1, 13.1, 13.15, 13.15, 13.15, 13.15, 13.15, 7.76, 7.76, 7.76, 7.76, 7.76, 2.24, 2.24, 2.24, 2.24, 2.24, 0.0, 0.0, 0.0, 0.0, 0.0], "spInv": [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false], "yawRaw": [-85.5, -88.97, -92.26, -95.12, -97.28, -98.68, -99.63, -100.23, -100.44, -100.56, -100.68, -100.76, -100.74, -100.71, -100.69, -100.68, -100.66, -100.59, -100.54, -100.52, -100.51, -100.54, -100.62, -100.61, -100.66, -100.72, -100.73, -100.71, -100.7, -100.69, -100.68, -100.65, -100.63, -100.57, -100.57, -100.58, -100.54, -100.55, -100.55, -100.56, -100.56, -100.54, -100.53, -100.5, -100.51, -100.5, -100.77, -101.27, -101.58, -101.86, -102.02, -102.25, -102.35, -102.45, -102.55, -102.65, -102.7, -102.77, -102.7, -102.65, -102.57, -102.54, -102.49, -102.45, -102.41, -102.37, -102.34, -102.12, -101.99, -101.91, -101.86, -101.82, -101.8, -101.78, -101.77], "yawSm": [-85.5, -88.91, -91.83, -94.46, -96.6, -98.19, -99.25, -99.91, -100.31, -100.53, -100.63, -100.69, -100.72, -100.72, -100.7, -100.67, -100.63, -100.6, -100.57, -100.54, -100.55, -100.56, -100.59, -100.63, -100.67, -100.68, -100.7, -100.71, -100.7, -100.69, -100.67, -100.64, -100.62, -100.6, -100.58, -100.56, -100.56, -100.55, -100.55, -100.55, -100.55, -100.54, -100.53, -100.52, -100.56, -100.71, -100.93, -101.2, -101.5, -101.79, -102.01, -102.18, -102.32, -102.45, -102.54, -102.63, -102.67, -102.69, -102.68, -102.65, -102.59, -102.54, -102.49, -102.45, -102.41, -102.34, -102.25, -102.15, -102.04, -101.94, -101.87, -101.83, -101.81, -101.78, -101.77], "dyawT": [0.199, 0.399, 0.598, 0.801, 0.999, 1.201, 1.402, 1.599, 1.801, 2.001, 2.2, 2.4, 2.604, 2.799, 3.0, 3.199, 3.401, 3.6, 3.8, 4.0, 4.2, 4.399, 4.6, 4.802, 5.001, 5.199, 5.4, 5.6, 5.8, 6.0, 6.2, 6.4, 6.6, 6.802, 7.001, 7.207, 7.401, 7.603, 7.802, 8.0, 8.2, 8.42, 8.602, 8.801, 9.002, 9.2, 9.401, 9.604, 9.801, 10.0, 10.201, 10.404, 10.601, 10.802, 11.001, 11.202, 11.402, 11.603, 11.802, 12.006, 12.203, 12.405, 12.602, 12.802, 13.001, 13.202, 13.404, 13.602, 13.802, 14.001, 14.202, 14.401, 14.603, 14.802, 15.002], "dyaw": [0.0, 17.06, 14.65, 12.98, 10.76, 7.89, 5.29, 3.33, 1.98, 1.13, 0.51, 0.27, 0.13, 0.0, 0.09, 0.15, 0.16, 0.18, 0.17, 0.12, 0.03, 0.06, 0.14, 0.21, 0.19, 0.09, 0.1, 0.03, 0.05, 0.08, 0.08, 0.13, 0.11, 0.1, 0.11, 0.08, 0.02, 0.02, 0.02, 0.0, 0.02, 0.04, 0.06, 0.06, 0.23, 0.75, 1.07, 1.33, 1.54, 1.48, 1.08, 0.86, 0.7, 0.63, 0.46, 0.42, 0.25, 0.1, 0.08, 0.16, 0.29, 0.25, 0.25, 0.2, 0.21, 0.36, 0.45, 0.51, 0.51, 0.52, 0.32, 0.21, 0.13, 0.11, 0.06], "thr": 2.8, "starT": 10.0, "starV": 8.29, "algo": {"genus": "HRB", "severity": 7.631, "peak_smooth": 8.29, "baseline": 0.659, "dec_amp": 10.66, "dec_steps": 6, "inc_amp": 0.25, "inc_steps": 4, "net_turn": -1.87, "yaw_rate": 1.54, "v_start": 12.86, "v_end": 0.0}, "cfg": {"severity_th": 2.5, "speed_window": [-2, 4], "min_net_decel": 4.0, "min_net_accel": 3.0, "max_end_speed_decel": 5.0, "max_start_speed_accel": 5.0, "turn_window": [-3, 3], "min_net_turn": 30.0, "max_net_turn": 360.0, "min_turn_rate": 10.0, "max_turn_rate": 90.0, "max_end_speed_turning": 10.0, "peak_win": [-2.0, 1.0], "yaw_smooth_window": 5}, "genus": "HRB", "genusZh": "急煞車"}, {"src": "assets/videos/harsh_driving/case3.mp4?v=1788503430", "poster": "assets/videos/harsh_driving/case3.jpg", "verdict": "急煞車成立", "cls": "violation", "stmt": "減速淨幅 6.53 m/s ≥ 4・嚴重度 7.14 ≥ 2.5・末速 0.0 < 5", "title": "市區路口急煞至靜止——嚴重度 7.14、單調減速 5 個台階", "desc": "午後市區路口停等，時速 23.5 公里剎停：嚴重度 7.14、減速淨幅 6.53 m/s。與前一筆對照很有意思——初速只有它的一半，嚴重度卻相近：嚴重度量的是加速度峰值高出基線多少，不是速度變化量本身；兩者各自把關（嚴重度 ≥ 2.8、減速淨幅 ≥ 3 m/s），一項不過就不成立。", "meta": "客戶D・車號尾碼 685・2026-08-08 15:26 (JST)", "dur": 15.0, "tTrig": 10.0, "vt": [0.199, 0.398, 0.599, 0.798, 0.998, 1.197, 1.398, 1.599, 1.798, 1.998, 2.198, 2.399, 2.599, 2.799, 2.999, 3.2, 3.403, 3.6, 3.799, 3.999, 4.2, 4.399, 4.599, 4.799, 4.999, 5.199, 5.399, 5.599, 5.801, 5.999, 6.2, 6.399, 6.6, 6.799, 7.0, 7.2, 7.402, 7.6, 7.8, 8.0, 8.2, 8.4, 8.6, 8.8, 9.001, 9.2, 9.4, 9.608, 9.8, 10.0, 10.201, 10.4, 10.6, 10.801, 11.001, 11.214, 11.4, 11.601, 11.801, 12.0, 12.2, 12.402, 12.6, 12.806, 13.002, 13.201, 13.401, 13.606, 13.8, 14.001, 14.202, 14.4, 14.603, 14.801, 15.002], "acc": [1.287, 0.744, 0.617, 0.448, 0.54, 0.381, 0.325, 0.382, 0.279, 0.416, 0.36, 0.173, 0.368, 0.323, 0.446, 0.488, 0.495, 0.532, 0.211, 0.18, 0.12, 0.151, 0.141, 0.044, 0.222, 0.218, 0.704, 1.336, 1.351, 1.334, 1.051, 0.47, 0.515, 0.026, 0.091, 0.19, 0.494, 0.248, 0.386, 0.146, 0.031, 0.299, 0.556, 0.543, 0.605, 1.519, 2.694, 2.875, 2.933, 3.576, 3.432, 9.191, 6.261, 7.377, 3.721, 1.156, 1.138, 1.133, 1.201, 0.945, 0.983, 0.913, 0.885, 0.585, 0.375, 0.269, 0.184, 0.126, 0.381, 0.859, 0.958, 1.14, 1.323, 1.173, 1.004], "ema": [0.727, 0.728, 0.722, 0.709, 0.7, 0.684, 0.666, 0.652, 0.633, 0.623, 0.609, 0.588, 0.577, 0.564, 0.558, 0.555, 0.552, 0.551, 0.534, 0.516, 0.496, 0.479, 0.462, 0.441, 0.43, 0.419, 0.434, 0.479, 0.522, 0.563, 0.587, 0.581, 0.578, 0.551, 0.528, 0.511, 0.51, 0.497, 0.491, 0.474, 0.452, 0.444, 0.45, 0.454, 0.462, 0.515, 0.624, 0.736, 0.846, 0.983, 1.105, 1.509, 1.747, 2.029, 2.113, 2.065, 2.019, 1.975, 1.936, 1.886, 1.841, 1.795, 1.749, 1.691, 1.625, 1.558, 1.489, 1.421, 1.369, 1.343, 1.324, 1.315, 1.315, 1.308, 1.293], "speed": [3.1, 3.1, 3.1, 3.1, 3.3, 3.3, 3.3, 3.3, 3.3, 3.5, 3.5, 3.5, 3.5, 3.5, 3.97, 3.97, 3.97, 3.97, 3.97, 4.72, 4.72, 4.72, 4.72, 4.72, 5.24, 5.24, 5.24, 5.24, 5.24, 6.52, 6.52, 6.52, 6.52, 6.52, 6.75, 6.75, 6.75, 6.75, 6.75, 6.53, 6.53, 6.53, 6.53, 6.53, 6.9, 6.9, 6.9, 6.9, 6.9, 7.33, 7.33, 7.33, 7.33, 7.33, 6.39, 6.39, 6.39, 6.39, 6.39, 5.12, 5.12, 5.12, 5.12, 5.12, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "spInv": [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false], "yawRaw": [132.91, 132.22, 132.18, 132.09, 131.96, 131.72, 131.46, 131.42, 131.41, 131.42, 131.31, 131.3, 131.35, 131.41, 131.42, 131.41, 131.45, 131.51, 131.46, 131.45, 131.54, 131.59, 131.63, 131.56, 131.62, 131.66, 131.76, 131.94, 132.14, 132.23, 132.2, 132.19, 132.13, 132.13, 132.17, 132.23, 132.27, 132.27, 132.25, 132.04, 131.87, 131.58, 131.38, 131.37, 131.29, 131.33, 131.71, 132.35, 132.7, 133.05, 133.25, 133.6, 134.16, 134.39, 134.66, 133.82, 133.99, 133.94, 133.88, 133.75, 133.69, 133.62, 133.54, 133.08, 132.78, 132.6, 132.46, 132.4, 132.25, 132.17, 132.04, 131.95, 131.83, 131.7, 131.61], "yawSm": [132.91, 132.44, 132.27, 132.03, 131.88, 131.73, 131.6, 131.49, 131.41, 131.37, 131.36, 131.36, 131.36, 131.38, 131.41, 131.44, 131.45, 131.46, 131.48, 131.51, 131.53, 131.55, 131.59, 131.61, 131.65, 131.71, 131.83, 131.95, 132.06, 132.14, 132.18, 132.18, 132.17, 132.17, 132.19, 132.21, 132.24, 132.21, 132.14, 132.0, 131.82, 131.65, 131.5, 131.39, 131.42, 131.61, 131.88, 132.23, 132.61, 132.99, 133.35, 133.69, 134.01, 134.12, 134.2, 134.16, 134.06, 133.88, 133.85, 133.78, 133.7, 133.54, 133.34, 133.12, 132.89, 132.66, 132.5, 132.38, 132.26, 132.16, 132.05, 131.94, 131.83, 131.71, 131.61], "dyawT": [0.199, 0.398, 0.599, 0.798, 0.998, 1.197, 1.398, 1.599, 1.798, 1.998, 2.198, 2.399, 2.599, 2.799, 2.999, 3.2, 3.403, 3.6, 3.799, 3.999, 4.2, 4.399, 4.599, 4.799, 4.999, 5.199, 5.399, 5.599, 5.801, 5.999, 6.2, 6.399, 6.6, 6.799, 7.0, 7.2, 7.402, 7.6, 7.8, 8.0, 8.2, 8.4, 8.6, 8.8, 9.001, 9.2, 9.4, 9.608, 9.8, 10.0, 10.201, 10.4, 10.6, 10.801, 11.001, 11.214, 11.4, 11.601, 11.801, 12.0, 12.2, 12.402, 12.6, 12.806, 13.002, 13.201, 13.401, 13.606, 13.8, 14.001, 14.202, 14.4, 14.603, 14.801, 15.002], "dyaw": [0.0, 2.38, 0.82, 1.2, 0.77, 0.75, 0.67, 0.54, 0.41, 0.16, 0.08, 0.0, 0.0, 0.09, 0.15, 0.16, 0.04, 0.03, 0.14, 0.14, 0.12, 0.1, 0.17, 0.12, 0.17, 0.32, 0.58, 0.61, 0.53, 0.44, 0.18, 0.01, 0.06, 0.02, 0.08, 0.14, 0.12, 0.14, 0.35, 0.69, 0.89, 0.88, 0.75, 0.54, 0.13, 0.97, 1.34, 1.69, 2.0, 1.88, 1.8, 1.7, 1.61, 0.56, 0.4, 0.2, 0.55, 0.9, 0.12, 0.38, 0.4, 0.8, 0.98, 1.06, 1.18, 1.15, 0.83, 0.59, 0.57, 0.51, 0.56, 0.56, 0.55, 0.57, 0.51], "thr": 2.8, "starT": 10.6, "starV": 7.61, "algo": {"genus": "HRB", "severity": 7.136, "peak_smooth": 7.61, "baseline": 0.474, "dec_amp": 6.53, "dec_steps": 5, "inc_amp": 0.0, "inc_steps": 0, "net_turn": 0.94, "yaw_rate": 2.0, "v_start": 6.53, "v_end": 0.0}, "cfg": {"severity_th": 2.5, "speed_window": [-2, 4], "min_net_decel": 4.0, "min_net_accel": 3.0, "max_end_speed_decel": 5.0, "max_start_speed_accel": 5.0, "turn_window": [-3, 3], "min_net_turn": 30.0, "max_net_turn": 360.0, "min_turn_rate": 10.0, "max_turn_rate": 90.0, "max_end_speed_turning": 10.0, "peak_win": [-2.0, 1.0], "yaw_smooth_window": 5}, "genus": "HRB", "genusZh": "急煞車"}, {"src": "assets/videos/harsh_driving/case4.mp4?v=1788503433", "poster": "assets/videos/harsh_driving/case4.jpg", "verdict": "急轉彎成立", "cls": "violation", "stmt": "淨轉向 50.8° ≥ 30・角速度 20.7°/s・嚴重度 6.22 ≥ 2.5", "title": "夜間路口低速急轉——淨轉向 50.8°、角速度 20.7°/s", "desc": "夜間鬧區路口、行人正在穿越，時速僅 8.4 公里的低速大角度轉向：淨轉向 50.8°、角速度 20.7°/s，轉彎四關卡全數通過。低速正是加速度方向分解會失效的區間——此時向心加速度僅約 1 m/s²，會被雜訊淹沒；方向資訊只能交給 yaw 航向角承擔。這筆的成立完全建立在航向變化上，加速度只負責嚴重度門檻，是「用對的訊號做對的判斷」的直接例證。", "meta": "客戶D・車號尾碼 791・2026-08-01 20:12 (JST)", "dur": 15.0, "tTrig": 10.0, "vt": [0.396, 0.593, 0.794, 0.994, 1.196, 1.395, 1.595, 1.793, 1.993, 2.195, 2.392, 2.593, 2.793, 2.994, 3.196, 3.394, 3.593, 3.794, 3.994, 4.194, 4.394, 4.594, 4.794, 4.995, 5.194, 5.393, 5.595, 5.793, 5.996, 6.193, 6.393, 6.598, 6.794, 7.01, 7.194, 7.394, 7.596, 7.793, 7.994, 8.197, 8.394, 8.596, 8.794, 8.995, 9.197, 9.395, 9.595, 9.796, 10.0, 10.196, 10.395, 10.597, 10.796, 10.996, 11.198, 11.395, 11.595, 11.796, 11.996, 12.196, 12.395, 12.596, 12.799, 12.996, 13.197, 13.396, 13.595, 13.798, 13.997, 14.2, 14.4, 14.595, 14.796, 14.995, 15.197], "acc": [0.006, 0.003, 0.006, 0.022, 0.667, 0.868, 1.04, 1.142, 1.156, 1.196, 1.074, 0.619, 0.081, 0.278, 0.358, 0.325, 0.345, 0.409, 0.563, 0.594, 0.642, 0.565, 0.369, 0.283, 0.196, 0.333, 0.106, 0.649, 0.844, 0.311, 0.703, 0.665, 0.399, 0.631, 0.668, 0.916, 1.13, 1.151, 1.043, 0.847, 0.866, 0.978, 1.124, 1.191, 1.15, 1.131, 5.289, 6.864, 8.23, 4.276, 2.792, 0.443, 1.232, 0.691, 0.786, 0.633, 0.759, 0.571, 0.609, 0.57, 0.691, 1.837, 2.02, 2.131, 2.065, 2.028, 1.881, 1.214, 0.986, 0.81, 0.71, 0.669, 0.458, 0.394, 0.277], "ema": [0.141, 0.134, 0.128, 0.123, 0.15, 0.186, 0.228, 0.274, 0.318, 0.362, 0.398, 0.409, 0.392, 0.387, 0.385, 0.382, 0.38, 0.382, 0.391, 0.401, 0.413, 0.421, 0.418, 0.411, 0.401, 0.397, 0.383, 0.396, 0.418, 0.413, 0.427, 0.439, 0.437, 0.447, 0.458, 0.481, 0.513, 0.545, 0.57, 0.584, 0.598, 0.617, 0.642, 0.67, 0.694, 0.716, 0.944, 1.24, 1.59, 1.724, 1.778, 1.711, 1.687, 1.637, 1.595, 1.546, 1.507, 1.46, 1.418, 1.375, 1.341, 1.366, 1.399, 1.435, 1.467, 1.495, 1.514, 1.499, 1.473, 1.44, 1.404, 1.367, 1.322, 1.275, 1.225], "speed": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.69, 0.69, 0.69, 0.69, 0.69, 1.91, 1.91, 1.91, 1.91, 1.91, 2.32, 2.32, 2.32, 2.32, 2.32, 2.27, 2.27, 2.27, 2.27, 2.27, 2.33, 2.33, 2.33, 2.33, 2.33, 2.84, 2.84, 2.84, 2.84, 2.84, 3.49, 3.49, 3.49, 3.49, 3.49, 4.3, 4.3, 4.3, 4.3, 4.3, 2.9, 2.9, 2.9, 2.9, 2.9, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.6, 0.6, 0.6, 0.6, 0.6, 2.42, 2.42, 2.42, 2.42], "spInv": [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false], "yawRaw": [66.09, 66.09, 66.09, 66.08, 66.11, 66.1, 66.21, 66.37, 66.35, 66.37, 66.37, 66.26, 66.25, 66.25, 66.26, 66.25, 66.21, 66.22, 66.23, 66.25, 66.26, 66.3, 66.42, 66.52, 66.73, 67.03, 67.59, 68.5, 69.83, 71.26, 72.89, 74.78, 76.95, 79.27, 81.92, 84.81, 87.96, 91.37, 94.94, 98.61, 102.37, 106.32, 110.35, 114.56, 118.9, 123.17, 125.91, 127.55, 128.16, 127.92, 128.05, 127.93, 128.04, 127.96, 127.96, 127.97, 127.97, 127.97, 127.98, 127.98, 128.04, 128.39, 128.91, 129.97, 131.31, 133.13, 135.17, 137.55, 139.47, 141.18, 142.55, 143.62, 144.44, 145.08, 145.5], "yawSm": [66.09, 66.09, 66.09, 66.09, 66.12, 66.17, 66.23, 66.28, 66.34, 66.34, 66.32, 66.3, 66.28, 66.25, 66.24, 66.24, 66.23, 66.23, 66.23, 66.25, 66.29, 66.35, 66.45, 66.6, 66.86, 67.27, 67.94, 68.84, 70.01, 71.45, 73.14, 75.03, 77.16, 79.55, 82.18, 85.07, 88.2, 91.54, 95.05, 98.72, 102.52, 106.44, 110.5, 114.66, 118.58, 122.02, 124.74, 126.54, 127.52, 127.92, 128.02, 127.98, 127.99, 127.97, 127.98, 127.97, 127.97, 127.97, 127.99, 128.07, 128.26, 128.66, 129.32, 130.34, 131.7, 133.43, 135.33, 137.3, 139.18, 140.88, 142.25, 143.38, 144.24, 145.01, 145.5], "dyawT": [0.396, 0.593, 0.794, 0.994, 1.196, 1.395, 1.595, 1.793, 1.993, 2.195, 2.392, 2.593, 2.793, 2.994, 3.196, 3.394, 3.593, 3.794, 3.994, 4.194, 4.394, 4.594, 4.794, 4.995, 5.194, 5.393, 5.595, 5.793, 5.996, 6.193, 6.393, 6.598, 6.794, 7.01, 7.194, 7.394, 7.596, 7.793, 7.994, 8.197, 8.394, 8.596, 8.794, 8.995, 9.197, 9.395, 9.595, 9.796, 10.0, 10.196, 10.395, 10.597, 10.796, 10.996, 11.198, 11.395, 11.595, 11.796, 11.996, 12.196, 12.395, 12.596, 12.799, 12.996, 13.197, 13.396, 13.595, 13.798, 13.997, 14.2, 14.4, 14.595, 14.796, 14.995, 15.197], "dyaw": [0.0, 0.0, 0.02, 0.01, 0.13, 0.28, 0.27, 0.26, 0.28, 0.05, 0.12, 0.1, 0.11, 0.12, 0.05, 0.03, 0.02, 0.01, 0.01, 0.09, 0.2, 0.29, 0.48, 0.77, 1.3, 2.09, 3.27, 4.57, 5.77, 7.3, 8.45, 9.21, 10.88, 11.04, 14.32, 14.42, 15.52, 16.94, 17.47, 18.09, 19.27, 19.43, 20.49, 20.7, 19.4, 17.38, 13.59, 8.97, 4.78, 2.06, 0.49, 0.2, 0.05, 0.08, 0.04, 0.07, 0.02, 0.01, 0.07, 0.42, 0.95, 1.98, 3.29, 5.18, 6.75, 8.68, 9.55, 9.73, 9.46, 8.33, 6.89, 5.76, 4.3, 3.86, 2.45], "thr": 2.8, "starT": 9.796, "starV": 6.79, "algo": {"genus": "HRT", "severity": 6.224, "peak_smooth": 6.794, "baseline": 0.57, "dec_amp": 2.24, "dec_steps": 6, "inc_amp": 1.46, "inc_steps": 2, "net_turn": 50.79, "yaw_rate": 20.7, "v_start": 2.33, "v_end": 0.0}, "cfg": {"severity_th": 2.5, "speed_window": [-2, 4], "min_net_decel": 4.0, "min_net_accel": 3.0, "max_end_speed_decel": 5.0, "max_start_speed_accel": 5.0, "turn_window": [-3, 3], "min_net_turn": 30.0, "max_net_turn": 360.0, "min_turn_rate": 10.0, "max_turn_rate": 90.0, "max_end_speed_turning": 10.0, "peak_win": [-2.0, 1.0], "yaw_smooth_window": 5}, "genus": "HRT", "genusZh": "急轉彎"}, {"src": "assets/videos/harsh_driving/case5.mp4?v=1788503435", "poster": "assets/videos/harsh_driving/case5.jpg", "verdict": "急轉彎成立", "cls": "violation", "stmt": "淨轉向 41.2° ≥ 30・角速度 19.0°/s・嚴重度 4.80 ≥ 2.5", "title": "急轉彎＋剎停——淨轉向 41°、角速度 19°/s", "desc": "右轉進巷口時遇行人穿越而急剎的複合案例：減速淨幅 4.35 也過了急煞門檻，但淨轉向 41.2°、角速度 19°/s 讓轉彎四關卡全數通過——決策樹依「轉彎優先」判為急轉彎。看 yaw 圖：橘色原始訊號的抖動被平滑曲線壓掉，淨轉向取窗內頭尾差，左右晃動不會累積成淨值。", "meta": "客戶B・車號尾碼 104・2026-05-20 13:03 (JST)", "dur": 15.0, "tTrig": 10.0, "vt": [0.204, 0.402, 0.6, 0.8, 1.0, 1.209, 1.399, 1.598, 1.798, 2.001, 2.2, 2.402, 2.6, 2.805, 3.001, 3.2, 3.413, 3.601, 3.802, 4.001, 4.203, 4.401, 4.609, 4.801, 5.004, 5.2, 5.403, 5.602, 5.805, 6.002, 6.202, 6.4, 6.6, 6.805, 7.0, 7.199, 7.403, 7.604, 7.806, 8.001, 8.199, 8.405, 8.6, 8.803, 9.007, 9.2, 9.402, 9.603, 9.805, 10.0, 10.205, 10.401, 10.601, 10.801, 11.002, 11.202, 11.401, 11.603, 11.804, 12.013, 12.202, 12.401, 12.602, 12.808, 13.001, 13.203, 13.403, 13.608, 13.803, 14.002, 14.201, 14.409, 14.602, 14.806, 15.003], "acc": [1.245, 0.901, 0.781, 0.653, 0.594, 0.485, 0.554, 0.746, 0.598, 0.548, 0.579, 0.311, 0.882, 0.422, 0.3, 0.337, 0.412, 0.228, 0.184, 0.166, 0.389, 0.495, 0.296, 0.23, 0.616, 0.379, 0.233, 0.644, 0.648, 0.442, 0.578, 0.577, 0.595, 0.16, 0.223, 0.485, 0.423, 0.541, 0.538, 0.458, 1.916, 1.132, 2.181, 2.391, 2.016, 1.552, 2.484, 6.071, 6.145, 3.693, 2.598, 3.222, 1.755, 2.196, 0.691, 1.4, 0.529, 1.011, 0.713, 0.57, 0.411, 0.173, 0.208, 0.119, 0.133, 0.081, 0.659, 0.854, 0.497, 0.231, 0.465, 0.511, 0.051, 0.282, 0.212], "ema": [0.835, 0.838, 0.835, 0.826, 0.815, 0.798, 0.786, 0.784, 0.775, 0.763, 0.754, 0.732, 0.739, 0.724, 0.702, 0.684, 0.671, 0.648, 0.625, 0.602, 0.592, 0.587, 0.572, 0.555, 0.558, 0.549, 0.533, 0.539, 0.544, 0.539, 0.541, 0.543, 0.546, 0.526, 0.511, 0.51, 0.505, 0.507, 0.509, 0.506, 0.577, 0.604, 0.683, 0.769, 0.831, 0.867, 0.948, 1.204, 1.451, 1.563, 1.615, 1.695, 1.698, 1.723, 1.672, 1.658, 1.602, 1.572, 1.529, 1.481, 1.428, 1.365, 1.307, 1.248, 1.192, 1.136, 1.113, 1.1, 1.069, 1.028, 0.999, 0.975, 0.929, 0.896, 0.862], "speed": [10.2, 10.38, 10.38, 10.38, 10.38, 10.38, 9.96, 9.96, 9.96, 9.96, 9.96, 9.05, 9.05, 9.05, 9.05, 9.05, 8.13, 8.13, 8.13, 8.13, 8.13, 6.19, 6.19, 6.19, 6.19, 6.19, null, null, null, null, null, 5.1, 5.1, 5.1, 5.1, 5.1, 4.35, 4.35, 4.35, 4.35, 4.35, 4.35, 4.35, 4.35, 4.35, 4.35, 2.39, 2.39, 2.39, 2.39, 2.39, 2.66, 2.66, 2.66, 2.66, 2.66, 2.65, 2.65, 2.65, 2.65, 2.65, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "spInv": [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false], "yawRaw": [-83.11, -83.16, -83.16, -83.1, -83.03, -82.96, -82.89, -82.85, -82.85, -82.85, -82.85, -82.85, -82.84, -82.84, -82.83, -82.75, -82.74, -82.61, -82.53, -82.53, -82.34, -81.91, -81.38, -80.72, -79.81, -78.6, -77.34, -76.01, -74.74, -73.27, -71.75, -70.1, -68.22, -66.17, -64.14, -62.14, -60.19, -58.21, -56.23, -54.19, -51.88, -49.37, -46.48, -43.09, -39.21, -34.89, -31.21, -28.17, -26.17, -24.71, -23.84, -23.23, -23.27, -23.17, -23.23, -23.08, -23.07, -23.06, -23.06, -23.03, -23.01, -23.01, -23.0, -23.0, -23.0, -22.99, -22.87, -22.68, -22.27, -21.79, -21.18, -20.5, -19.75, -18.96, -18.06], "yawSm": [-83.11, -83.14, -83.11, -83.08, -83.03, -82.97, -82.92, -82.88, -82.86, -82.85, -82.85, -82.84, -82.84, -82.82, -82.8, -82.75, -82.69, -82.63, -82.55, -82.38, -82.14, -81.78, -81.23, -80.48, -79.57, -78.5, -77.3, -75.99, -74.62, -73.18, -71.62, -69.9, -68.08, -66.15, -64.17, -62.17, -60.18, -58.19, -56.14, -53.98, -51.63, -49.0, -46.01, -42.61, -38.98, -35.32, -31.93, -29.03, -26.82, -25.22, -24.24, -23.64, -23.35, -23.2, -23.16, -23.12, -23.1, -23.06, -23.05, -23.03, -23.02, -23.01, -23.0, -23.0, -22.97, -22.91, -22.76, -22.52, -22.16, -21.68, -21.1, -20.44, -19.69, -18.93, -18.06], "dyawT": [0.204, 0.402, 0.6, 0.8, 1.0, 1.209, 1.399, 1.598, 1.798, 2.001, 2.2, 2.402, 2.6, 2.805, 3.001, 3.2, 3.413, 3.601, 3.802, 4.001, 4.203, 4.401, 4.609, 4.801, 5.004, 5.2, 5.403, 5.602, 5.805, 6.002, 6.202, 6.4, 6.6, 6.805, 7.0, 7.199, 7.403, 7.604, 7.806, 8.001, 8.199, 8.405, 8.6, 8.803, 9.007, 9.2, 9.402, 9.603, 9.805, 10.0, 10.205, 10.401, 10.601, 10.801, 11.002, 11.202, 11.401, 11.603, 11.804, 12.013, 12.202, 12.401, 12.602, 12.808, 13.001, 13.203, 13.403, 13.608, 13.803, 14.002, 14.201, 14.409, 14.602, 14.806, 15.003], "dyaw": [0.0, 0.17, 0.16, 0.15, 0.27, 0.3, 0.26, 0.18, 0.11, 0.05, 0.01, 0.01, 0.01, 0.1, 0.11, 0.23, 0.29, 0.32, 0.41, 0.84, 1.22, 1.83, 2.62, 3.9, 4.5, 5.47, 5.89, 6.57, 6.75, 7.35, 7.79, 8.65, 9.14, 9.38, 10.16, 10.06, 9.74, 9.9, 10.15, 11.1, 11.85, 12.76, 15.36, 16.74, 17.8, 18.98, 16.75, 14.43, 10.94, 8.19, 4.78, 3.06, 1.48, 0.76, 0.15, 0.21, 0.11, 0.2, 0.08, 0.06, 0.07, 0.06, 0.03, 0.01, 0.14, 0.32, 0.72, 1.18, 1.86, 2.38, 2.94, 3.18, 3.86, 3.76, 4.38], "thr": 2.8, "starT": 9.805, "starV": 5.3, "algo": {"genus": "HRT", "severity": 4.797, "peak_smooth": 5.303, "baseline": 0.506, "dec_amp": 4.35, "dec_steps": 6, "inc_amp": 0.26, "inc_steps": 2, "net_turn": 41.17, "yaw_rate": 18.98, "v_start": 4.35, "v_end": 0.0}, "cfg": {"severity_th": 2.5, "speed_window": [-2, 4], "min_net_decel": 4.0, "min_net_accel": 3.0, "max_end_speed_decel": 5.0, "max_start_speed_accel": 5.0, "turn_window": [-3, 3], "min_net_turn": 30.0, "max_net_turn": 360.0, "min_turn_rate": 10.0, "max_turn_rate": 90.0, "max_end_speed_turning": 10.0, "peak_win": [-2.0, 1.0], "yaw_smooth_window": 5}, "genus": "HRT", "genusZh": "急轉彎"}, {"src": "assets/videos/harsh_driving/case6.mp4?v=1788503438", "poster": "assets/videos/harsh_driving/case6.jpg", "verdict": "急轉彎成立", "cls": "violation", "stmt": "淨轉向 78.9° ≥ 30・角速度 38.4°/s・嚴重度 5.08 ≥ 2.5", "title": "山路彎道行進中急轉——淨轉向 78.9°、角速度 38.4°/s", "desc": "深夜山路連續彎道，時速 37 公里入彎、末速仍有 26 公里的行進中急轉：淨轉向 78.9° 與角速度 38.4°/s 都是本頁最大值，且都還沒觸及上限關卡（過大的淨轉向或角速度會被視為路口正常轉彎、甚至原地迴轉而濾除——上下限同時存在，才框得出「該報的急轉」）。基線 1.62 是本頁最高：山路鋪面與連續彎道把震動地板抬了上來，嚴重度 5.07 是扣掉這層地板後仍然成立的結果。", "meta": "客戶D・車號尾碼 355・2026-08-29 00:53 (JST)", "dur": 15.0, "tTrig": 9.595, "vt": [0.196, 0.394, 0.595, 0.793, 0.993, 1.193, 1.392, 1.594, 1.792, 2.004, 2.193, 2.407, 2.595, 2.793, 2.996, 3.193, 3.393, 3.597, 3.794, 3.997, 4.193, 4.393, 4.592, 4.792, 4.993, 5.199, 5.394, 5.593, 5.794, 5.994, 6.193, 6.395, 6.593, 6.797, 6.993, 7.196, 7.394, 7.594, 7.796, 7.993, 8.193, 8.393, 8.604, 8.793, 8.998, 9.198, 9.394, 9.595, 9.794, 10.0, 10.197, 10.397, 10.594, 10.797, 10.995, 11.194, 11.399, 11.608, 11.799, 11.995, 12.195, 12.396, 12.599, 12.797, 12.996, 13.194, 13.395, 13.594, 13.795, 13.994, 14.199, 14.394, 14.603, 14.811, 14.995, 15.195], "acc": [1.531, 1.402, 0.999, 1.409, 1.639, 2.568, 2.641, 2.127, 1.661, 1.281, 2.192, 3.208, 3.251, 2.26, 2.207, 3.218, 0.75, 0.447, 0.896, 2.046, 1.165, 0.456, 0.682, 1.032, 1.192, 2.58, 1.607, 2.283, 1.114, 1.053, 1.516, 1.289, 1.314, 1.749, 2.059, 2.094, 2.311, 1.274, 1.633, 1.441, 0.702, 1.394, 2.66, 1.972, 2.555, 3.246, 4.428, 6.459, 5.491, 5.548, 6.428, 6.563, 7.079, 5.517, 5.451, 4.659, 3.953, 4.59, 4.766, 5.155, 3.992, 3.672, 3.46, 2.746, 4.001, 3.876, 5.12, 4.676, 3.86, 4.088, 4.222, 3.491, 3.443, 2.994, 2.606, 2.432], "ema": [1.396, 1.397, 1.377, 1.378, 1.391, 1.45, 1.51, 1.541, 1.547, 1.533, 1.566, 1.648, 1.729, 1.755, 1.778, 1.85, 1.795, 1.727, 1.686, 1.704, 1.677, 1.616, 1.569, 1.542, 1.525, 1.577, 1.579, 1.614, 1.589, 1.562, 1.56, 1.547, 1.535, 1.546, 1.571, 1.597, 1.633, 1.615, 1.616, 1.607, 1.562, 1.554, 1.609, 1.627, 1.673, 1.752, 1.886, 2.115, 2.283, 2.447, 2.646, 2.842, 3.053, 3.177, 3.29, 3.359, 3.388, 3.449, 3.514, 3.596, 3.616, 3.619, 3.611, 3.568, 3.59, 3.604, 3.68, 3.73, 3.736, 3.754, 3.777, 3.763, 3.747, 3.709, 3.654, 3.593], "speed": [11.68, 11.68, 9.45, 9.45, 9.45, 9.45, 9.45, 6.83, 6.83, 6.83, 6.83, 6.83, 5.73, 5.73, 5.73, 5.73, 5.73, 5.65, 5.65, 5.65, 5.65, 5.65, 7.72, 7.72, 7.72, 7.72, 7.72, 9.31, 9.31, 9.31, 9.31, 9.31, 10.32, 10.32, 10.32, 10.32, 10.32, 11.3, 11.3, 11.3, 11.3, 11.3, 11.5, 11.5, 11.5, 11.5, 11.5, 11.81, 11.81, 11.81, 11.81, 11.81, 11.34, 11.34, 11.34, 11.34, 11.34, 10.12, 10.12, 10.12, 10.12, 10.12, 8.82, 8.82, 8.82, 8.82, 8.82, 7.31, 7.31, 7.31, 7.31, 7.31, 7.51, 7.51, 7.51, 7.51], "spInv": [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false], "yawRaw": [178.37, 177.1, 175.05, 172.42, 169.08, 164.6, 159.38, 154.88, 150.31, 145.16, 139.15, 132.86, 126.61, 120.69, 114.74, 109.29, 105.02, 101.69, 98.85, 96.21, 93.58, 90.92, 88.15, 85.39, 82.57, 79.81, 77.05, 74.32, 71.45, 68.71, 66.02, 63.13, 60.3, 57.36, 54.48, 51.64, 48.78, 45.91, 43.11, 40.57, 38.07, 36.22, 35.41, 34.93, 34.74, 35.44, 38.02, 41.99, 46.69, 52.21, 58.41, 65.05, 71.95, 78.95, 85.99, 92.88, 100.53, 108.34, 115.44, 122.62, 129.51, 136.54, 143.24, 149.36, 155.4, 161.72, 168.14, 174.56, -179.44, -173.59, -167.82, -162.21, -157.03, -152.53, -148.9, -146.2], "yawSm": [178.37, 176.84, 174.41, 171.65, 168.1, 164.07, 159.65, 154.86, 149.77, 144.47, 138.82, 132.89, 126.81, 120.84, 115.27, 110.29, 105.92, 102.21, 99.07, 96.25, 93.55, 90.85, 88.12, 85.37, 82.59, 79.83, 77.04, 74.27, 71.51, 68.73, 65.92, 63.11, 60.26, 57.38, 54.51, 51.63, 48.78, 46.0, 43.29, 40.78, 38.68, 37.04, 35.87, 35.35, 35.71, 37.02, 39.38, 42.87, 47.46, 52.87, 58.86, 65.31, 72.07, 78.97, 86.06, 93.34, 100.64, 107.96, 115.29, 122.49, 129.47, 136.25, 142.81, 149.25, 155.57, 161.83, 168.07, 174.28, 180.37, 186.3, 191.98, 197.36, 202.3, 206.63, 210.79, 213.8], "dyawT": [0.196, 0.394, 0.595, 0.793, 0.993, 1.193, 1.392, 1.594, 1.792, 2.004, 2.193, 2.407, 2.595, 2.793, 2.996, 3.193, 3.393, 3.597, 3.794, 3.997, 4.193, 4.393, 4.592, 4.792, 4.993, 5.199, 5.394, 5.593, 5.794, 5.994, 6.193, 6.395, 6.593, 6.797, 6.993, 7.196, 7.394, 7.594, 7.796, 7.993, 8.193, 8.393, 8.604, 8.793, 8.998, 9.198, 9.394, 9.595, 9.794, 10.0, 10.197, 10.397, 10.594, 10.797, 10.995, 11.194, 11.399, 11.608, 11.799, 11.995, 12.195, 12.396, 12.599, 12.797, 12.996, 13.194, 13.395, 13.594, 13.795, 13.994, 14.199, 14.394, 14.603, 14.811, 14.995, 15.195], "dyaw": [0.0, 7.72, 12.12, 13.91, 17.73, 20.17, 22.23, 23.68, 25.71, 25.01, 29.91, 27.67, 32.36, 30.16, 27.43, 25.3, 21.84, 18.17, 15.94, 13.89, 13.81, 13.46, 13.71, 13.78, 13.8, 13.44, 14.3, 13.93, 13.72, 13.92, 14.08, 13.95, 14.38, 14.1, 14.65, 14.18, 14.4, 13.9, 13.43, 12.75, 10.49, 8.18, 5.53, 2.78, 1.75, 6.58, 12.0, 17.38, 23.08, 26.25, 30.42, 32.26, 34.3, 33.96, 35.84, 36.57, 35.6, 35.05, 38.36, 36.74, 34.9, 33.75, 32.29, 32.53, 31.76, 31.64, 31.05, 31.17, 30.31, 29.81, 27.71, 27.6, 23.63, 20.78, 22.63, 15.03], "thr": 3.0, "starT": 10.397, "starV": 6.69, "algo": {"genus": "HRT", "severity": 5.075, "peak_smooth": 6.69, "baseline": 1.615, "dec_amp": 3.99, "dec_steps": 6, "inc_amp": 0.04, "inc_steps": 3, "net_turn": 78.87, "yaw_rate": 38.36, "v_start": 10.32, "v_end": 7.31}, "cfg": {"severity_th": 2.5, "speed_window": [-2, 4], "min_net_decel": 4.0, "min_net_accel": 3.0, "max_end_speed_decel": 5.0, "max_start_speed_accel": 5.0, "turn_window": [-3, 3], "min_net_turn": 30.0, "max_net_turn": 360.0, "min_turn_rate": 10.0, "max_turn_rate": 90.0, "max_end_speed_turning": 10.0, "peak_win": [-2.0, 1.0], "yaw_smooth_window": 5}, "genus": "HRT", "genusZh": "急轉彎"}];
+const C = { blue:"#38bdf8", green:"#34d399", warn:"#fbbf24", danger:"#f87171",
+            cyan:"#22d3ee", orange:"#fb923c",
+            ink:"#e2e8f0", muted:"#94a3b8", line:"#334155" };
+
+let ci = 0, cs = CASES[0];
+const video = document.getElementById("main-video");
+const gmag = document.getElementById("gmag");
+const ghead = document.getElementById("ghead");
+const hudAcc = document.getElementById("hud-acc");
+const hudSpd = document.getElementById("hud-spd");
+const hudVerdict = document.getElementById("hud-verdict");
+const hudFrame = document.getElementById("hud-frame");
+const cvAcc = document.getElementById("chartAcc");
+const cvSpd = document.getElementById("chartSpd");
+const cvYaw = document.getElementById("chartYaw");
+const cvDyaw = document.getElementById("chartDyaw");
+const items = Array.from(document.querySelectorAll(".pl-item"));
+const PAD = { l: 44, r: 10, t: 6, b: 18 };
+let chartCache = [];
+
+function selectCase(i, play) {
+  ci = i; cs = CASES[i];
+  video.src = cs.src;
+  video.poster = cs.poster;
+  video.playbackRate = parseFloat(document.getElementById("rate").value);
+  document.getElementById("vp-badge").textContent = cs.verdict;
+  document.getElementById("vp-badge").className = "vp-badge " + cs.cls;
+  document.getElementById("vp-stmt").textContent = cs.stmt;
+  document.getElementById("vp-title").textContent = "範例" + "一二三四五六"[i] + "：" + cs.title;
+  document.getElementById("vp-desc").textContent = cs.desc;
+  document.getElementById("vp-meta").textContent = cs.meta;
+  items.forEach((el, j) => el.classList.toggle("active", j === i));
+  renderDecision();
+  drawCharts();
+  if (play) video.play().catch(() => {});
+}
+items.forEach((el, i) => el.addEventListener("click", () => selectCase(i, true)));
+
+const FRAME_DT = 0.2;   // IMU 約 5 Hz
+// seek 節流: 瀏覽器 seek 未完成前先記住目標, seeked 後再補跳一次
+let seekPending = null;
+function seekTo(t) {
+  t = Math.max(0, Math.min(cs.dur, t)) + 0.001;
+  if (video.seeking) { seekPending = t; return; }
+  video.currentTime = t;
+}
+video.addEventListener("seeked", () => {
+  if (seekPending != null) { const t = seekPending; seekPending = null; video.currentTime = t; }
+});
+
+// ---- 影片下方迷你時間軸 ----
+const scrub = document.getElementById("scrub");
+function scrubSeek(e) {
+  const r = scrub.getBoundingClientRect();
+  seekTo(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * cs.dur);
+}
+scrub.onpointerdown = e => { e.preventDefault(); scrub.setPointerCapture(e.pointerId);
+  scrub._drag = true; video.pause(); scrubSeek(e); };
+scrub.onpointermove = e => { if (scrub._drag) scrubSeek(e); };
+scrub.onpointerup = scrub.onpointercancel = () => { scrub._drag = false; };
+function drawScrub(t) {
+  const rs = rootScale();
+  const w = scrub.clientWidth / rs, h = scrub.clientHeight / rs;
+  if (!w) return;
+  if (scrub.width !== Math.round(w * devicePixelRatio)) {
+    scrub.width = w * devicePixelRatio; scrub.height = h * devicePixelRatio;
+  }
+  const ctx = scrub.getContext("2d");
+  ctx.setTransform(devicePixelRatio * rs, 0, 0, devicePixelRatio * rs, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const y0 = h / 2 - 3, X = tt => Math.max(0, Math.min(1, tt / cs.dur)) * w;
+  ctx.fillStyle = "rgba(51,65,85,.85)"; ctx.fillRect(0, y0, w, 6);
+  // 速度判斷窗色帶 + 觸發時刻標記 (與下方曲線圖同語意)
+  const sw = cs.cfg.speed_window;
+  ctx.fillStyle = "rgba(56,189,248,.35)";
+  ctx.fillRect(X(cs.tTrig + sw[0]), y0, X(cs.tTrig + sw[1]) - X(cs.tTrig + sw[0]), 6);
+  ctx.fillStyle = C.blue; ctx.fillRect(0, y0, X(t), 6);
+  ctx.fillStyle = C.danger; ctx.fillRect(X(cs.tTrig) - 1, y0 - 3, 2, 12);
+  ctx.beginPath(); ctx.arc(X(t), h / 2, 5, 0, 7);
+  ctx.fillStyle = C.ink; ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,.6)"; ctx.stroke();
+}
+
+// ---- 流程圖展開 ----
+const btnFlow = document.getElementById("btnFlow");
+const flowPanel = document.getElementById("flowPanel");
+function setFlow(open) {
+  flowPanel.hidden = !open;
+  btnFlow.classList.toggle("open", open);
+  btnFlow.textContent = open ? "系統流程圖 ▴" : "系統流程圖 ▾";
+}
+btnFlow.onclick = () => setFlow(flowPanel.hidden);
+if (location.hash === "#flow") setFlow(true);
+
+// ---- 控制 ----
+const btnPlay = document.getElementById("btnPlay");
+// play() 回傳 promise: 快速連點時前一次 play 可能被 pause 中斷丟 AbortError, 吃掉即可
+btnPlay.onclick = () => { video.paused ? video.play().catch(() => {}) : video.pause(); };
+// 點影片本身 = 播放/暫停 (HUD 與儀表不在 video 元素上, 不受影響)
+video.addEventListener("click", () => btnPlay.onclick());
+// 聲音: 預設靜音 (自動播放政策也要求), 按鈕開關; 換案例沿用目前開關狀態
+const btnMute = document.getElementById("btnMute");
+btnMute.onclick = () => {
+  video.muted = !video.muted;
+  btnMute.textContent = video.muted ? "🔇 聲音" : "🔊 靜音";
+};
+video.addEventListener("play", () => btnPlay.textContent = "⏸ 暫停");
+video.addEventListener("pause", () => btnPlay.textContent = "▶ 播放");
+document.getElementById("btnPrev").onclick = () => { video.pause(); seekTo(video.currentTime - FRAME_DT); };
+document.getElementById("btnNext").onclick = () => { video.pause(); seekTo(video.currentTime + FRAME_DT); };
+document.getElementById("rate").onchange = e => video.playbackRate = parseFloat(e.target.value);
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "SELECT") return;
+  if (e.code === "Space") { e.preventDefault(); btnPlay.onclick(); }
+  if (e.code === "ArrowLeft") { e.preventDefault(); video.pause(); seekTo(video.currentTime - FRAME_DT); }
+  if (e.code === "ArrowRight") { e.preventDefault(); video.pause(); seekTo(video.currentTime + FRAME_DT); }
+});
+
+// ---- 數列取值 (線性內插) ----
+const rootScale = () => parseFloat(getComputedStyle(document.documentElement).fontSize) / 16;
+function idxAt(t) {
+  const vt = cs.vt;
+  let lo = 0, hi = vt.length - 1;
+  while (lo < hi) { const m = (lo + hi + 1) >> 1; (vt[m] <= t) ? lo = m : hi = m - 1; }
+  return lo;
+}
+function valAt(arr, t) {
+  const vt = cs.vt, i = idxAt(t);
+  if (i >= vt.length - 1) return arr[vt.length - 1];
+  const a = arr[i], b = arr[i + 1];
+  if (a == null || b == null) return a;
+  const dt = vt[i + 1] - vt[i];
+  if (dt <= 0 || dt > 0.8) return a;
+  return a + (b - a) * (t - vt[i]) / dt;
+}
+
+// ---- 右下角遙測儀表 ----
+// G 力計: 只呈現水平加速度「合力大小」——演算法判定用的就是 hypot(ax,ay);
+//   IMU 安裝方向逐車不同 (實測 103/104 就不同), 方向不可靠、量值可靠, 故不畫方向。
+// 航向儀: yaw 是航向角 (羅盤慣例, 增加=右轉, 已用影片驗證), 方向可靠——
+//   顯示「相對片頭」的轉向角, 急轉彎事件會看到指針實際轉過去。
+const G_MAX = 10;   // G 力計最外圈 = 10 m/s²
+function meterBase(cv) {
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== Math.round(w * devicePixelRatio)) {
+    cv.width = w * devicePixelRatio; cv.height = h * devicePixelRatio;
+  }
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 4;
+  ctx.fillStyle = "rgba(10,15,28,.72)";
+  ctx.beginPath(); ctx.arc(cx, cy, R + 3, 0, 7); ctx.fill();
+  return [ctx, w, h, cx, cy, R];
+}
+function drawGmag(t) {
+  const [ctx, w, h, cx, cy, R] = meterBase(gmag);
+  const fs = Math.max(8, Math.round(w * .085));
+  // 參考圈: 2.5/5/7.5/10, 車機觸發門檻圈以橘色標示
+  for (const g of [2.5, 5, 7.5, 10]) {
+    ctx.strokeStyle = "rgba(148,163,184,.25)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(cx, cy, R * g / G_MAX, 0, 7); ctx.stroke();
+  }
+  ctx.strokeStyle = "rgba(251,191,36,.55)"; ctx.setLineDash([3, 3]);
+  ctx.beginPath(); ctx.arc(cx, cy, R * cs.thr / G_MAX, 0, 7); ctx.stroke();
+  ctx.setLineDash([]);
+  // 量值 = 實心圓半徑 (脈衝式), 超過門檻轉紅
+  const a = valAt(cs.acc, t) || 0;
+  const r = R * Math.min(a, G_MAX) / G_MAX;
+  const hot = a >= cs.thr;
+  ctx.fillStyle = hot ? "rgba(248,113,113,.4)" : "rgba(251,191,36,.3)";
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill();
+  ctx.strokeStyle = hot ? C.danger : C.warn; ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.stroke();
+  // 標題與數值
+  ctx.textAlign = "center";
+  ctx.font = "bold " + fs + "px Consolas,monospace";
+  ctx.fillStyle = "rgba(148,163,184,.9)";
+  ctx.fillText("G 力", cx, cy - R + fs);
+  ctx.font = "bold " + Math.round(fs * 1.35) + "px Consolas,monospace";
+  ctx.fillStyle = hot ? C.danger : C.ink;
+  ctx.fillText(a.toFixed(1), cx, cy + fs * .5);
+  ctx.font = fs * .8 + "px Consolas,monospace"; ctx.fillStyle = "rgba(148,163,184,.8)";
+  ctx.fillText("m/s²", cx, cy + R - 4);
+  ctx.textAlign = "left";
+}
+function drawHeading(t) {
+  const [ctx, w, h, cx, cy, R] = meterBase(ghead);
+  const fs = Math.max(8, Math.round(w * .085));
+  const dEg = valAt(cs.yawSm, t) - cs.yawSm[0];   // 相對片頭的轉向角 (+ = 右轉)
+  const rad = dEg * Math.PI / 180;
+  // 刻度圈
+  ctx.strokeStyle = "rgba(148,163,184,.3)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, R - 2, 0, 7); ctx.stroke();
+  for (let a = 0; a < 360; a += 30) {
+    const th = a * Math.PI / 180;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.sin(th) * (R - 6), cy - Math.cos(th) * (R - 6));
+    ctx.lineTo(cx + Math.sin(th) * (R - 2), cy - Math.cos(th) * (R - 2));
+    ctx.stroke();
+  }
+  // 片頭方向參考線 (正上)
+  ctx.strokeStyle = "rgba(148,163,184,.45)"; ctx.setLineDash([2, 3]);
+  ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, cy - R + 7); ctx.stroke();
+  ctx.setLineDash([]);
+  // 已轉過的角度掃出弧 (超過急轉門檻 30° 轉紅)
+  const swept = Math.abs(dEg) >= 30;
+  ctx.strokeStyle = swept ? C.danger : C.green; ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R * .58, -Math.PI / 2, -Math.PI / 2 + rad, rad < 0);
+  ctx.stroke(); ctx.lineWidth = 1;
+  // 車輛指針 (三角形), 依 yaw 旋轉
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(rad);
+  ctx.fillStyle = swept ? C.danger : C.blue;
+  ctx.beginPath();
+  ctx.moveTo(0, -R * .48); ctx.lineTo(R * .17, R * .2);
+  ctx.lineTo(0, R * .08); ctx.lineTo(-R * .17, R * .2);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+  // 標題與角度
+  ctx.textAlign = "center";
+  ctx.font = "bold " + fs + "px Consolas,monospace";
+  ctx.fillStyle = "rgba(148,163,184,.9)";
+  ctx.fillText("航向", cx, cy - R + fs);
+  ctx.font = "bold " + fs + "px Consolas,monospace";
+  ctx.fillStyle = swept ? C.danger : C.ink;
+  ctx.fillText((dEg >= 0 ? "右 " : "左 ") + Math.abs(dEg).toFixed(0) + "°", cx, cy + R - 4);
+  ctx.textAlign = "left";
+}
+
+// ---- 圖表 ----
+function setupCanvas(cv) {
+  if (!cv.dataset.designH) cv.dataset.designH = cv.getAttribute("height");
+  // 以「設計像素」作畫、context 乘上根字級倍率 rs——canvas 內固定 px 的字級/
+  // 座標跟著 2K/4K 的 rem 版面等比放大 (滑鼠座標換算處同步乘 rs)
+  const rs = rootScale();
+  const w = cv.clientWidth / rs, h = parseInt(cv.dataset.designH);
+  cv.width = cv.clientWidth * devicePixelRatio;
+  cv.height = Math.round(h * rs) * devicePixelRatio;
+  cv.style.height = Math.round(h * rs) + "px";
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(devicePixelRatio * rs, 0, 0, devicePixelRatio * rs, 0, 0);
+  return [ctx, w, h];
+}
+const xS = (t, w) => PAD.l + (t / cs.dur) * (w - PAD.l - PAD.r);
+
+function axis(ctx, w, h, yTicks, yFn, unit) {
+  ctx.strokeStyle = C.line; ctx.fillStyle = C.muted; ctx.font = "10px Consolas,monospace";
+  ctx.strokeRect(PAD.l, PAD.t, w - PAD.l - PAD.r, h - PAD.t - PAD.b);
+  yTicks.forEach(v => {
+    const yy = yFn(v);
+    ctx.globalAlpha = .3;
+    ctx.beginPath(); ctx.moveTo(PAD.l, yy); ctx.lineTo(w - PAD.r, yy); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillText(String(v) + (unit || ""), 3, yy + 3);
+  });
+  for (let s = 0; s <= Math.floor(cs.dur); s += 2)
+    ctx.fillText(s + "s", xS(s, w) - 6, h - 5);
+}
+
+function shadeWin(ctx, w, h, win, color) {
+  const a = cs.tTrig + win[0], b = cs.tTrig + win[1];
+  ctx.fillStyle = color;
+  ctx.fillRect(xS(Math.max(0, a), w), PAD.t,
+               xS(Math.min(cs.dur, b), w) - xS(Math.max(0, a), w), h - PAD.t - PAD.b);
+}
+function markTrig(ctx, w, h, label) {
+  ctx.strokeStyle = C.blue; ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(xS(cs.tTrig, w), PAD.t); ctx.lineTo(xS(cs.tTrig, w), h - PAD.b); ctx.stroke();
+  ctx.setLineDash([]);
+  if (label) {
+    ctx.fillStyle = C.blue; ctx.font = "bold 10px Consolas,monospace";
+    ctx.fillText("T 觸發", xS(cs.tTrig, w) + 4, PAD.t + 12);
+  }
+}
+function polyline(ctx, xs, ys, color, width) {
+  ctx.strokeStyle = color; ctx.lineWidth = width; ctx.beginPath();
+  let pen = false;
+  for (let i = 0; i < xs.length; i++) {
+    if (ys[i] == null) { pen = false; continue; }
+    pen ? ctx.lineTo(xs[i], ys[i]) : ctx.moveTo(xs[i], ys[i]); pen = true;
+  }
+  ctx.stroke(); ctx.lineWidth = 1;
+}
+
+function drawCharts() {
+  // thumbmode (封面截圖) 下圖表區 display:none、canvas 尺寸為 0——
+  // getImageData(0,0) 會拋錯中斷後續 HUD/儀表, 直接跳過
+  if (document.body.classList.contains("thumbmode")) return;
+  chartCache = [];
+  const X = cs.vt.map(t => 0);   // 每張圖重算 (寬度不同)
+
+  // -- 加速度合力 --
+  {
+    const [ctx, w, h] = setupCanvas(cvAcc);
+    ctx.clearRect(0, 0, w, h);
+    const yMax = Math.max(10, Math.ceil(Math.max(...cs.acc) + 1));
+    const y = v => PAD.t + (1 - Math.min(v, yMax) / yMax) * (h - PAD.t - PAD.b);
+    shadeWin(ctx, w, h, cs.cfg.peak_win, "rgba(248,113,113,.09)");
+    axis(ctx, w, h, [0, 2.5, 5, Math.round(yMax * 3 / 4), yMax].filter((v,i,a)=>a.indexOf(v)===i), y);
+    markTrig(ctx, w, h, true);
+    const xs = cs.vt.map(t => xS(t, w));
+    // 車機觸發門檻
+    ctx.strokeStyle = "rgba(148,163,184,.6)"; ctx.setLineDash([5, 5]);
+    ctx.beginPath(); ctx.moveTo(PAD.l, y(cs.thr)); ctx.lineTo(w - PAD.r, y(cs.thr)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = C.muted; ctx.font = "bold 10px Consolas,monospace";
+    ctx.fillText("觸發門檻 " + cs.thr, w - PAD.r - 90, y(cs.thr) - 4);
+    // 原始合力 + EMA
+    polyline(ctx, xs, cs.acc.map(y), "rgba(226,232,240,.8)", 1.4);
+    polyline(ctx, xs, cs.ema.map(y), C.cyan, 2);
+    ctx.fillStyle = C.cyan; ctx.fillText("EMA 基線", xs[Math.floor(xs.length*.13)], y(cs.ema[Math.floor(xs.length*.13)]) - 6);
+    // baseline 虛線 + 峰值星星 + severity 標註
+    const bl = cs.algo.baseline;
+    ctx.strokeStyle = C.green; ctx.setLineDash([3, 4]); ctx.globalAlpha = .8;
+    ctx.beginPath(); ctx.moveTo(PAD.l, y(bl)); ctx.lineTo(w - PAD.r, y(bl)); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    const sx0 = xS(cs.starT, w), syP = y(cs.algo.peak_smooth), syB = y(bl);
+    ctx.strokeStyle = C.danger; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(sx0, syP); ctx.lineTo(sx0, syB); ctx.stroke(); ctx.lineWidth = 1;
+    ctx.fillStyle = C.warn; ctx.font = "bold 14px Consolas,monospace";
+    ctx.fillText("★", sx0 - 5, syP - 4);
+    ctx.fillStyle = C.danger; ctx.font = "bold 11px Consolas,monospace";
+    ctx.fillText("嚴重度 " + cs.algo.severity.toFixed(2),
+                 Math.min(sx0 + 8, w - 110), (syP + syB) / 2 + 4);
+    chartCache.push([cvAcc, ctx.getImageData(0, 0, cvAcc.width, cvAcc.height)]);
+  }
+
+  // -- GPS 速度 --
+  {
+    const [ctx, w, h] = setupCanvas(cvSpd);
+    ctx.clearRect(0, 0, w, h);
+    const vmax = Math.max(...cs.speed.filter(v => v != null), 5);
+    const yMax = Math.ceil(vmax + 1);
+    const y = v => PAD.t + (1 - Math.min(v, yMax) / yMax) * (h - PAD.t - PAD.b);
+    shadeWin(ctx, w, h, cs.cfg.speed_window, "rgba(56,189,248,.09)");
+    axis(ctx, w, h, [0, Math.round(yMax / 2), yMax], y, "");
+    markTrig(ctx, w, h, false);
+    const xs = cs.vt.map(t => xS(t, w));
+    polyline(ctx, xs, cs.speed.map(v => v == null ? null : y(v)), C.green, 2);
+    // GPS 失效紅 X
+    ctx.strokeStyle = C.danger; ctx.font = "bold 10px Consolas,monospace";
+    for (let i = 0; i < cs.vt.length; i++) {
+      if (!cs.spInv[i]) continue;
+      const px = xs[i], py = h - PAD.b - 6;
+      ctx.beginPath(); ctx.moveTo(px - 3, py - 3); ctx.lineTo(px + 3, py + 3);
+      ctx.moveTo(px + 3, py - 3); ctx.lineTo(px - 3, py + 3); ctx.stroke();
+    }
+    // 淨幅標註
+    const a = cs.algo;
+    ctx.fillStyle = C.blue;
+    const netTxt = (cs.genus === "HRA")
+      ? "最佳單調段 +" + a.inc_amp.toFixed(2) + " m/s"
+      : "最佳單調段 −" + a.dec_amp.toFixed(2) + " m/s";
+    ctx.fillText(netTxt, PAD.l + 6, PAD.t + 12);
+    chartCache.push([cvSpd, ctx.getImageData(0, 0, cvSpd.width, cvSpd.height)]);
+  }
+
+  // -- yaw --
+  {
+    const [ctx, w, h] = setupCanvas(cvYaw);
+    ctx.clearRect(0, 0, w, h);
+    const all = cs.yawSm.concat(cs.yawRaw.filter(v => Math.abs(v) < 1e5));
+    let yMin = Math.min(...cs.yawSm), yMaxV = Math.max(...cs.yawSm);
+    const padY = Math.max(6, (yMaxV - yMin) * 0.15);
+    yMin -= padY; yMaxV += padY;
+    const y = v => PAD.t + (1 - (Math.max(yMin, Math.min(yMaxV, v)) - yMin) / (yMaxV - yMin)) * (h - PAD.t - PAD.b);
+    shadeWin(ctx, w, h, cs.cfg.turn_window, "rgba(52,211,153,.09)");
+    axis(ctx, w, h, [Math.round(yMin + padY), Math.round((yMin + yMaxV) / 2), Math.round(yMaxV - padY)], y, "°");
+    markTrig(ctx, w, h, false);
+    const xs = cs.vt.map(t => xS(t, w));
+    // 原始 (未 unwrap 的顯示: 直接畫 raw, 環繞跳變處自然斷開)
+    ctx.globalAlpha = .55;
+    polyline(ctx, xs, cs.yawRaw.map(v => (v < yMin - 90 || v > yMaxV + 90) ? null : y(v)), C.orange, 1.2);
+    ctx.globalAlpha = 1;
+    polyline(ctx, xs, cs.yawSm.map(y), C.blue, 2);
+    // 淨轉向標註 (窗內頭尾)
+    ctx.fillStyle = C.green; ctx.font = "bold 11px Consolas,monospace";
+    ctx.fillText("淨轉向 " + (cs.algo.net_turn >= 0 ? "+" : "") + cs.algo.net_turn.toFixed(1) + "°",
+                 xS(cs.tTrig + cs.cfg.turn_window[0], w) + 6, PAD.t + 14);
+    chartCache.push([cvYaw, ctx.getImageData(0, 0, cvYaw.width, cvYaw.height)]);
+  }
+
+  // -- 角速度 --
+  {
+    const [ctx, w, h] = setupCanvas(cvDyaw);
+    ctx.clearRect(0, 0, w, h);
+    const yMax = Math.max(30, Math.ceil(Math.max(...cs.dyaw) * 1.15));
+    const y = v => PAD.t + (1 - Math.min(v, yMax) / yMax) * (h - PAD.t - PAD.b);
+    shadeWin(ctx, w, h, cs.cfg.turn_window, "rgba(52,211,153,.09)");
+    axis(ctx, w, h, [0, cs.cfg.min_turn_rate, yMax], y, "");
+    markTrig(ctx, w, h, false);
+    // 下限門檻
+    ctx.strokeStyle = C.warn; ctx.setLineDash([5, 5]);
+    ctx.beginPath(); ctx.moveTo(PAD.l, y(cs.cfg.min_turn_rate)); ctx.lineTo(w - PAD.r, y(cs.cfg.min_turn_rate)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = C.warn; ctx.font = "bold 10px Consolas,monospace";
+    ctx.fillText("急轉下限 " + cs.cfg.min_turn_rate + "°/s", w - PAD.r - 110, y(cs.cfg.min_turn_rate) - 4);
+    const xs = cs.dyawT.map(t => xS(t, w));
+    polyline(ctx, xs, cs.dyaw.map(y), C.blue, 1.8);
+    ctx.fillStyle = C.blue; ctx.font = "bold 11px Consolas,monospace";
+    ctx.fillText("窗內最大 " + cs.algo.yaw_rate.toFixed(1) + "°/s", PAD.l + 6, PAD.t + 12);
+    chartCache.push([cvDyaw, ctx.getImageData(0, 0, cvDyaw.width, cvDyaw.height)]);
+  }
+
+  [cvAcc, cvSpd, cvYaw, cvDyaw].forEach(cv => {
+    const seekFromEvent = e => {
+      const rect = cv.getBoundingClientRect();
+      const rs = rootScale();
+      const frac = (e.clientX - rect.left - PAD.l * rs) / (rect.width - (PAD.l + PAD.r) * rs);
+      seekTo(Math.max(0, Math.min(1, frac)) * cs.dur);
+    };
+    cv.onpointerdown = e => {
+      e.preventDefault(); cv.setPointerCapture(e.pointerId);
+      cv._drag = true; video.pause(); seekFromEvent(e);
+    };
+    cv.onpointermove = e => { if (cv._drag) seekFromEvent(e); };
+    cv.onpointerup = cv.onpointercancel = () => { cv._drag = false; };
+  });
+}
+
+function drawCursors(t) {
+  chartCache.forEach(([cv, img]) => {
+    const ctx = cv.getContext("2d");
+    ctx.putImageData(img, 0, 0);
+    const rs = rootScale();
+    ctx.setTransform(devicePixelRatio * rs, 0, 0, devicePixelRatio * rs, 0, 0);
+    const w = cv.clientWidth / rs, h = parseInt(cv.dataset.designH);
+    const x = xS(Math.max(0, Math.min(cs.dur, t)), w);
+    ctx.strokeStyle = C.ink; ctx.globalAlpha = .85;
+    ctx.beginPath(); ctx.moveTo(x, PAD.t); ctx.lineTo(x, h - PAD.b); ctx.stroke();
+    ctx.globalAlpha = 1;
+  });
+}
+
+// ---- 決策樹面板 ----
+function dcRow(name, val, cond, pass) {
+  return '<div class="dc-row"><span>' + name + '</span>' +
+         '<span class="dv">' + val + '　<span class="' + (pass ? 'ok">✓ 過' : 'no">✗ 不過') +
+         '</span></span></div>' ;
+}
+function renderDecision() {
+  const a = cs.algo, f = cs.cfg;
+  const turnPass = {
+    net: Math.abs(a.net_turn) >= f.min_net_turn && Math.abs(a.net_turn) <= f.max_net_turn,
+    sev: a.severity >= f.severity_th,
+    rate: a.yaw_rate >= f.min_turn_rate && a.yaw_rate <= f.max_turn_rate,
+    vend: a.v_end != null && a.v_end < f.max_end_speed_turning,
+  };
+  const turnAll = turnPass.net && turnPass.sev && turnPass.rate && turnPass.vend;
+  const decPass = {
+    sev: a.severity >= f.severity_th,
+    amp: a.dec_amp >= f.min_net_decel,
+    vend: a.v_end != null && a.v_end < f.max_end_speed_decel,
+  };
+  const fx = v => v == null ? "—" : v.toFixed(2);
+  document.getElementById("dc-case").textContent =
+    "範例" + "一二三四五六"[ci] + "・" + cs.title;
+  document.getElementById("dc-turn-rows").innerHTML =
+    dcRow("① 淨轉向 " + f.min_net_turn + "~" + f.max_net_turn + "°",
+          "|" + a.net_turn.toFixed(1) + "°|", "", turnPass.net) +
+    dcRow("② 嚴重度 ≥ " + f.severity_th, a.severity.toFixed(2), "", turnPass.sev) +
+    dcRow("③ 角速度 " + f.min_turn_rate + "~" + f.max_turn_rate + " °/s",
+          a.yaw_rate.toFixed(1) + " °/s", "", turnPass.rate) +
+    dcRow("④ 末速 < " + f.max_end_speed_turning + " m/s", fx(a.v_end) + " m/s", "", turnPass.vend);
+  document.getElementById("dc-speed-rows").innerHTML =
+    dcRow("① 嚴重度 ≥ " + f.severity_th, a.severity.toFixed(2), "", decPass.sev) +
+    dcRow("② 減速淨幅 ≥ " + f.min_net_decel + " m/s", a.dec_amp.toFixed(2) + " m/s", "", decPass.amp) +
+    dcRow("③ 末速 < " + f.max_end_speed_decel + " m/s", fx(a.v_end) + " m/s", "", decPass.vend) +
+    '<div class="dc-row"><span style="color:var(--muted)">（急加速候選：加速淨幅 ' +
+    a.inc_amp.toFixed(2) + " / 門檻 " + f.min_net_accel + '，' +
+    (a.inc_amp >= f.min_net_accel ? "過" : "不過") + '）</span><span></span></div>';
+  document.getElementById("dc-turn").classList.toggle("win", cs.genus === "HRT");
+  document.getElementById("dc-speed").classList.toggle("win", cs.genus === "HRB" || cs.genus === "HRA");
+  document.getElementById("dc-turn").querySelector("h5").innerHTML =
+    "轉彎分類（四關卡全過才成立）" + (cs.genus === "HRT" ? '<span class="tag">採用</span>' : "");
+  document.getElementById("dc-speed").querySelector("h5").innerHTML =
+    "速度分類（急煞/急加速候選）" + (cs.genus !== "HRT" && cs.genus !== "HRD" ? '<span class="tag">採用</span>' : "");
+  document.getElementById("dc-final").innerHTML =
+    (cs.genus === "HRT"
+      ? "轉彎四關卡全數通過（轉彎優先）→ 最終分類：<b>" + cs.genusZh + "</b>"
+      : "轉彎關卡未全過 → 落入速度分類 → 最終分類：<b>" + cs.genusZh + "</b>");
+}
+
+// ---- 主迴圈 ----
+// ---- 對時手動校正 (臨時工具): [ / ] 微調 ±0.05s (Shift=±0.25s), 0 歸零 ----
+// 調到 G 力計/畫面對齊後, 把畫面上顯示的秒數回報即可烙進 av_lag; 正值=感測往後推
+let calib = 0;
+const calibBox = document.createElement("div");
+calibBox.style.cssText = "position:fixed;top:.6rem;left:50%;transform:translateX(-50%);" +
+  "z-index:990;background:rgba(10,15,28,.9);border:1px solid #fbbf24;color:#fbbf24;" +
+  "border-radius:8px;padding:.3rem 1rem;font:700 .95rem Consolas,monospace;display:none";
+document.body.appendChild(calibBox);
+function showCalib() {
+  calibBox.style.display = "block";
+  calibBox.textContent = "對時校正 " + (calib >= 0 ? "+" : "") + calib.toFixed(2) +
+    "s（案例" + (ci + 1) + "）  [ ] 微調・Shift 大步・0 歸零";
+}
+addEventListener("keydown", e => {
+  if (e.key === "[" || e.key === "]") {
+    calib += (e.key === "]" ? 1 : -1) * (e.shiftKey ? 0.25 : 0.05);
+    calib = Math.round(calib * 100) / 100; showCalib(); e.preventDefault();
+  } else if (e.key === "0" && calibBox.style.display === "block") {
+    calib = 0; showCalib();
+  }
+});
+function tick() {
+  const t = video.currentTime - calib;
+  const acc = valAt(cs.acc, t), spd = valAt(cs.speed, t);
+  if (acc != null) {
+    hudAcc.textContent = acc.toFixed(2) + " m/s²";
+    hudAcc.className = "num" + (acc >= cs.thr ? " hot" : "");
+  } else { hudAcc.textContent = "— m/s²"; hudAcc.className = "num"; }
+  hudSpd.textContent = "速度 " + (spd == null ? "—（GPS失效）"
+    : (spd * 3.6).toFixed(0) + " km/h（" + spd.toFixed(1) + " m/s）");
+  // 觸發瞬間才浮出分類徽章
+  if (t >= cs.tTrig) {
+    hudVerdict.parentElement.style.display = "";
+    hudVerdict.textContent = cs.genusZh + "成立";
+  } else {
+    hudVerdict.parentElement.style.display = "none";
+  }
+  const n = cs.vt.length;
+  const fNow = Math.max(1, Math.min(n, idxAt(t) + 1));
+  hudFrame.textContent = "車機演算法重現・IMU 5 Hz｜取樣 " + fNow + "/" + n;
+  drawGmag(t);
+  drawHeading(t);
+  drawScrub(t);
+  drawCursors(t);
+  document.getElementById("timeLabel").textContent =
+    "t=" + t.toFixed(2) + "s｜T" + (t >= cs.tTrig ? "+" : "−") + Math.abs(t - cs.tTrig).toFixed(1) + "s";
+  requestAnimationFrame(tick);
+}
+
+window.addEventListener("resize", () => { drawCharts(); });
+selectCase(0, false);
+// 網址 #t=秒數 → 開頁直接跳到該時刻
+// ---- 下滑凍結 (pip): 影片大半捲出視窗後, 固定成右上角小窗續播 ----
+// 占位 div 撐住原本版位 (版面不跳動); 觸發只看占位 div 的幾何, 不會回饋循環
+{
+  const wrap = document.querySelector(".videoWrap");
+  const ph = document.createElement("div");
+  wrap.parentNode.insertBefore(ph, wrap);
+  // pip: 迷你時間軸移進小窗底部 (原位留錨點); 固定右下角, 不可移動——
+  // 會擋內容時用「右滑收合」即可 (2026-09-04 使用者定案, 移除上/下檔位)
+  const scrubHome = document.createElement("span");
+  scrub.before(scrubHome);
+  // 右滑收合 (本次瀏覽記住); 收合即暫停, 展開不自動播放
+  let pipCollapsed = false;
+  const pipTab = document.createElement("button");
+  pipTab.className = "pipTab";
+  pipTab.textContent = "◀ 影片";
+  pipTab.hidden = true;
+  document.body.appendChild(pipTab);
+  // 左上尺寸切換 (標準/70%, localStorage 記住) + 右上提示
+  const pipCtl = document.createElement("button");
+  pipCtl.className = "pipCtl";
+  pipCtl.title = "切換小窗尺寸";
+  const pipHint = document.createElement("div");
+  pipHint.className = "pipHint";
+  pipHint.textContent = "→ 右滑可隱藏";
+  document.body.append(pipCtl, pipHint);   // 常駐貼在小窗上緣外側 (wrap overflow:hidden 放不了)
+  function placeHint() {
+    // 不用 getBoundingClientRect 的水平位置——展開動畫中 transform 會把它量到畫面外;
+    // 小窗固定右下 .6rem, 位置可直接算 (高度不受 translateX 影響)
+    if (!pipHint.classList.contains("on")) return;
+    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    const r = wrap.getBoundingClientRect();     // width/height 不受 translateX 影響
+    pipHint.style.right = (0.6 * rem) + "px";
+    pipHint.style.bottom = (0.6 * rem + r.height) + "px";
+    pipCtl.style.left = (innerWidth - 0.6 * rem - r.width) + "px";
+    pipCtl.style.bottom = (0.6 * rem + r.height) + "px";
+  }
+  addEventListener("resize", placeHint);
+  const PIP_SIZE = "showcasePipSize";
+  const getSize = () => { try { return localStorage.getItem(PIP_SIZE) || "l"; } catch (e) { return "l"; } };
+  const setSize = v => { try { localStorage.setItem(PIP_SIZE, v); } catch (e) {} };
+  function applySize() {
+    const sm = getSize() === "s";
+    wrap.classList.toggle("small", sm);
+    pipCtl.textContent = sm ? "⤢ 放大" : "⤡ 縮小";
+    placeHint();
+  }
+  pipCtl.onclick = e => { e.stopPropagation(); setSize(getSize() === "s" ? "l" : "s"); applySize(); };
+  function collapsePip() {
+    pipCollapsed = true; video.pause();
+    wrap.style.transform = "";
+    wrap.classList.add("pipmin");
+    pipTab.hidden = false;
+    pipHint.classList.remove("on"); pipCtl.classList.remove("on");
+  }
+  pipTab.onclick = () => {               // 展開: 不自動播放
+    pipCollapsed = false;
+    wrap.classList.remove("pipmin");
+    pipTab.hidden = true;
+    pipHint.classList.add("on"); pipCtl.classList.add("on");
+    placeHint();
+  };
+  // 原位快照: pip 觸發時把當下影格(含演算法疊框)畫進占位 div——原位不再是空洞,
+  // 視覺上與小窗並存; 點快照平滑捲回原位 (pip 會自動解除)
+  const snapGhost = document.createElement("div");
+  snapGhost.className = "pipGhost";
+  snapGhost.title = "點擊回到影片原位";
+  const snapCv = document.createElement("canvas");
+  const snapLbl = document.createElement("div");
+  snapLbl.textContent = "▶ 影片固定於右下角續播——點擊回到原位";
+  snapGhost.append(snapCv, snapLbl);
+  snapGhost.onclick = () =>
+    scrollTo({ top: ph.getBoundingClientRect().top + scrollY - 8, behavior: "smooth" });
+  function pipEnter() {
+    wrap.appendChild(scrub);
+    try {
+      snapCv.width = video.videoWidth || 1280;
+      snapCv.height = video.videoHeight || 720;
+      const g = snapCv.getContext("2d");
+      g.drawImage(video, 0, 0, snapCv.width, snapCv.height);
+      const ov = document.getElementById("overlay");
+      if (ov) g.drawImage(ov, 0, 0, snapCv.width, snapCv.height);
+    } catch (e) {}
+    ph.appendChild(snapGhost);
+    if (!pipCollapsed) { pipHint.classList.add("on"); pipCtl.classList.add("on"); }
+    applySize();
+    if (pipCollapsed) {           // 收合狀態下重新進 pip: 直接以按鈕出現, 不播滑出動畫
+      wrap.style.transition = "none";
+      wrap.classList.add("pipmin"); pipTab.hidden = false; video.pause();
+      void wrap.offsetWidth;
+      wrap.style.transition = "";
+    }
+  }
+  function pipExit() {
+    scrubHome.after(scrub);
+    snapGhost.remove();
+    wrap.classList.remove("pipmin"); pipTab.hidden = true;
+    pipHint.classList.remove("on"); pipCtl.classList.remove("on");
+    wrap.style.transform = "";
+  }
+  // 唯一手勢: 往右拖 (dx>8px 才算), 超過 40% 寬放開 = 收合, 否則彈回
+  let pipDrag = false, pipMoved = false, pipX0 = 0;
+  wrap.addEventListener("pointerdown", e => {
+    if (!wrap.classList.contains("pip") || wrap.classList.contains("pipmin") || e.target === scrub || e.target === pipCtl) return;
+    pipDrag = true; pipMoved = false; pipX0 = e.clientX;
+  });
+  addEventListener("pointermove", e => {
+    if (!pipDrag) return;
+    const dx = e.clientX - pipX0;
+    if (!pipMoved && dx < 8) return;
+    pipMoved = true;
+    wrap.style.transition = pipCtl.style.transition = "none";
+    const t = dx > 0 ? "translateX(" + dx + "px)" : "";
+    wrap.style.transform = t;
+    pipCtl.style.transform = t;   // 左上尺寸鈕跟著滑 (右滑提示已貼右緣, 不動)
+  });
+  addEventListener("pointerup", e => {
+    if (!pipDrag) return; pipDrag = false;
+    if (!pipMoved) return;
+    wrap.style.transition = ""; pipCtl.style.transition = "transform .25s";
+    pipCtl.style.transform = "";
+    // 門檻只需防「點暫停時手滑」——40px 已遠大於點擊抖動 (拖曳判定 8px)
+    if (e.clientX - pipX0 > 40) collapsePip();
+    else wrap.style.transform = "";
+  });
+  wrap.addEventListener("click", e => {   // 拖曳結束的 click 不觸發影片播放
+    if (pipMoved) { e.stopPropagation(); e.preventDefault(); pipMoved = false; }
+  }, true);
+  const updatePip = () => {
+    if (document.body.classList.contains("thumbmode")) return;
+    const on = wrap.classList.contains("pip");
+    const h = on ? parseFloat(ph.style.height) : wrap.offsetHeight;
+    const top = ph.getBoundingClientRect().top;
+    if (!on && top < -h * 0.6) { ph.style.height = h + "px"; wrap.classList.add("pip"); pipEnter(); }
+    else if (on && top > -h * 0.5) { wrap.classList.remove("pip"); ph.style.height = "0"; pipExit(); }
+  };
+  addEventListener("scroll", updatePip, { passive: true });
+  addEventListener("resize", updatePip);
+  updatePip();   // 開頁若已捲在下方 (重新整理保留捲動位置), 立即進入 pip
+}
+
+
+// ---- 圖表置頂 (📌): 點了把該圖移到最上、再點一次恢復預設 ----
+(function () {
+  const KEY = "showcasePinnedChart";
+  let memPin = null;   // localStorage 不可用 (部分瀏覽器 file://) 時的頁內備援
+  const getPin = () => { try { return localStorage.getItem(KEY); } catch (e) { return memPin; } };
+  const setPin = v => { memPin = v;
+    try { v == null ? localStorage.removeItem(KEY) : localStorage.setItem(KEY, v); } catch (e) {} };
+  const charts = [...document.querySelectorAll(".chart")];
+  if (!charts.length) return;
+  const parent = charts[0].parentElement;
+  const defaultOrder = charts.slice();
+  const keyOf = d => { const c = d.querySelector("canvas"); return c ? c.id : null; };
+  function apply() {
+    const pin = getPin();
+    defaultOrder.forEach(d => parent.appendChild(d));   // 先恢復預設順序
+    const pinned = charts.find(d => keyOf(d) === pin);
+    if (pinned && pinned !== defaultOrder[0]) parent.insertBefore(pinned, defaultOrder[0]);
+    charts.forEach(d => {
+      const b = d.querySelector(".pinBtn"), on = keyOf(d) === pin;
+      b.classList.toggle("active", on);
+      b.textContent = on ? "📌 已置頂" : "📌";
+    });
+  }
+  charts.forEach(d => {
+    const btn = document.createElement("button");
+    btn.className = "pinBtn";
+    btn.title = "把這張圖移到最上面（跨案例、跨分頁記憶；再點一次恢復預設）";
+    btn.onclick = () => { setPin(getPin() === keyOf(d) ? null : keyOf(d)); apply(); };
+    d.querySelector("h4").prepend(btn);
+  });
+  apply();
+})();
+
+if (location.hash.includes("thumb")) document.body.classList.add("thumbmode");
+const mC = location.hash.match(/c=(\d+)/);   // #c=N 直接切到第 N 個案例 (封面截圖用)
+if (mC) selectCase(+mC[1] - 1, false);
+const mT = location.hash.match(/t=([\d.]+)/);
+if (mT) {
+  video.autoplay = false;   // 否則 pause 後 autoplay 仍可能在 canplay 時把影片播起來
+  video.addEventListener("loadedmetadata", () => {
+    video.pause(); seekTo(parseFloat(mT[1]));
+  }, { once: true });
+}
+requestAnimationFrame(tick);
+
+// ---- 懸浮提示引擎: fixed 定位夾住視窗邊界, 上方放不下自動翻下方 ----
+const tipbox = document.createElement("div");
+tipbox.id = "tipbox";
+document.body.appendChild(tipbox);
+let tipAnchor = null;
+function placeTip() {
+  if (!tipAnchor) return;
+  const r = tipAnchor.getBoundingClientRect(), m = 8, gap = 9;
+  const tw = tipbox.offsetWidth, th = tipbox.offsetHeight;
+  const x = Math.max(m, Math.min(r.left + r.width / 2 - tw / 2, innerWidth - m - tw));
+  const below = r.top - th - gap < m;
+  const y = below ? Math.min(r.bottom + gap, innerHeight - m - th) : r.top - th - gap;
+  tipbox.classList.toggle("below", below);
+  tipbox.style.setProperty("--ax",
+    Math.max(12, Math.min(r.left + r.width / 2 - x, tw - 12)) + "px");
+  tipbox.style.left = x + "px"; tipbox.style.top = y + "px";
+}
+function showTip(el) {
+  tipAnchor = el; tipbox.textContent = el.dataset.tip;
+  tipbox.style.display = "block"; placeTip();
+}
+function hideTip() { tipAnchor = null; tipbox.style.display = "none"; }
+document.addEventListener("mouseover", e => {
+  const el = e.target.closest("[data-tip]");
+  if (el !== tipAnchor) el ? showTip(el) : hideTip();
+});
+document.documentElement.addEventListener("mouseleave", hideTip);
+addEventListener("scroll", placeTip, true);
+addEventListener("resize", placeTip);
+// 版面驗證用: #tipdebug=N 直接展開第 N 個提示 (供截圖檢查, 不影響一般瀏覽)
+const tipDbg = location.hash.match(/tipdebug=(\d+)/);
+if (tipDbg) {
+  const els = document.querySelectorAll("[data-tip]");
+  const el = els[Math.min(+tipDbg[1], els.length - 1)];
+  el.scrollIntoView({ block: "center" });
+  setTimeout(() => showTip(el), 300);
+}
+</script>
+</body>
+</html>
