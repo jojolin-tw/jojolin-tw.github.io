@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>分頁 01｜急駕駛事件偵測——慣性訊號處理互動可視化</title>
+<title>分頁 01｜急駕駛事件偵測——IMU 訊號處理互動可視化</title>
 <style>
   :root {
     --bg: #0f172a; --card: #1e293b; --panel: #16233a; --line: #334155;
@@ -388,7 +388,7 @@
       <rect x="20" y="172" width="1140" height="210" rx="12" fill="rgba(52,211,153,.05)" stroke="#334155"/>
       <text x="36" y="196" fill="#34d399" font-size="12.5" font-weight="800" letter-spacing="1.5">訊號特徵與決策樹（本頁重現的部分）</text>
       <rect x="40" y="210" width="330" height="66" rx="8" fill="#0f172a" stroke="#38bdf8"/>
-      <text x="205" y="237" fill="#38bdf8" font-size="12.5" font-weight="700" text-anchor="middle">嚴重度＝峰值 − EMA 基線</text>
+      <text x="205" y="237" fill="#38bdf8" font-size="12.5" font-weight="700" text-anchor="middle">嚴重度＝加速度峰值 − EMA 基線</text>
       <text x="205" y="256" fill="#94a3b8" font-size="10.5" text-anchor="middle">連續三點平均峰值・因果 EMA (α=0.05) 取觸發前 2s</text>
       <rect x="430" y="210" width="330" height="66" rx="8" fill="#0f172a" stroke="#38bdf8"/>
       <text x="595" y="237" fill="#38bdf8" font-size="12.5" font-weight="700" text-anchor="middle">速度特徵：最佳單調段淨幅</text>
@@ -397,9 +397,9 @@
       <text x="980" y="237" fill="#38bdf8" font-size="12.5" font-weight="700" text-anchor="middle">轉彎特徵：淨轉向＋角速度</text>
       <text x="980" y="256" fill="#94a3b8" font-size="10.5" text-anchor="middle">yaw unwrap＋平滑・|net|/(pos+neg) 比例濾抖動</text>
 
-      <rect x="240" y="302" width="450" height="64" rx="8" fill="#0f172a" stroke="#fbbf24"/>
-      <text x="465" y="328" fill="#fbbf24" font-size="12.5" font-weight="700" text-anchor="middle">決策樹（車機上即時執行）：轉彎四關卡優先 → 速度兩候選各自過關</text>
-      <text x="465" y="347" fill="#94a3b8" font-size="10.5" text-anchor="middle">每關卡＝實測值 vs 門檻，全程可解釋、可逐案覆核</text>
+      <rect x="140" y="302" width="650" height="64" rx="8" fill="#0f172a" stroke="#fbbf24"/>
+      <text x="465" y="328" fill="#fbbf24" font-size="12.5" font-weight="700" text-anchor="middle">決策樹：轉彎四關卡（淨轉向・角速度・嚴重度・末速）全過 → 急轉彎</text>
+      <text x="465" y="347" fill="#94a3b8" font-size="10.5" text-anchor="middle">否則急煞（嚴重度・減速淨幅・末速）／急加速（嚴重度・加速淨幅・初速）各自過三關；門檻皆為車隊可調參數</text>
       <rect x="740" y="302" width="180" height="28" rx="8" fill="rgba(248,113,113,.1)" stroke="#f87171"/>
       <text x="830" y="321" fill="#f87171" font-size="12" font-weight="700" text-anchor="middle">急煞／急加速／急轉彎</text>
       <rect x="740" y="338" width="180" height="28" rx="8" fill="rgba(52,211,153,.1)" stroke="#34d399"/>
@@ -414,9 +414,9 @@
   </div>
 
   <header class="hero">
-    <h1>急駕駛事件偵測：從慣性訊號還原危險駕駛的瞬間</h1>
+    <h1>急駕駛事件偵測：從 IMU 訊號還原危險駕駛的瞬間</h1>
     <p class="sub">消費級 IMU 雜訊大，路面顛簸與危險駕駛在絕對加速度上難以區分。本演算法從車機 15 秒感測窗萃取三組特徵：
-    <b>嚴重度</b>（峰值減去 EMA 基線）、<b>速度淨幅</b>（最佳單調段頭尾差）、<b>淨轉向</b>（航向角 unwrap 後的頭尾差），
+    <b>嚴重度</b>（加速度峰值減去 EMA 基線）、<b>速度淨幅</b>（最佳單調段頭尾差）、<b>淨轉向</b>（航向角 unwrap 後的頭尾差），
     交由參數化決策樹分成急煞車／急加速／急轉彎，每筆判定都能攤成「實測值 vs 門檻」逐關檢視。
     150 筆盲測人工標記：Precision 98.5%、Recall 94.3%；537 筆急轉彎中 181 筆路面抖動 181/181 全數攔截。
     下方是<b>可互動的演算法重現</b>：影片、G 力計、航向儀、逐幀訊號即時同步。</p>
@@ -424,7 +424,7 @@
       <span class="hchip m" data-tip="三軸加速度與陀螺儀 yaw，約 5 Hz；判定只用水平合力大小——IMU 安裝方向逐車不同，方向不可靠、量值可靠">IMU 慣性訊號處理</span>
       <span class="hchip m" data-tip="因果單向 EMA（α=0.05）取觸發前 2 秒的值當事件前基線；嚴重度＝峰值−基線，量的是相對高度，顛簸路面的常態震動不會虛報">EMA 濾波基線估計</span>
       <span class="hchip m" data-tip="速度淨幅＝窗內「最佳單調段」頭尾差：每秒去重、容忍 1 m/s 平台微抖、GPS 失效段切斷重算——比「最大速差」更貼近人對急煞的直覺">最佳單調段淨幅</span>
-      <span class="hchip m" data-tip="航向在 ±180° 環繞跳變，先 unwrap 解開再中心移動平均平滑；淨轉向取頭尾差，|net|/(pos+neg) 比例濾掉左右抖動">航向角 Unwrap</span>
+      <span class="hchip m" data-tip="航向角 yaw 由裝置姿態四元數解算，不受車機安裝角度影響；yaw 在 ±180° 環繞跳變，先 unwrap 解開再中心移動平均平滑；淨轉向取頭尾差，|net|/(pos+neg) 比例濾掉左右抖動">航向角 Unwrap</span>
       <span class="hchip m" data-tip="GPS 失效（−1）與真停車（0.0）嚴格分開：失效段不參與判斷、單調段跨失效區直接重置——低速時 GPS 誤差與車速同量級">GPS 品質閘控</span>
       <span class="hchip m" data-tip="門檻全部做成 per-client 參數（嚴重度三門檻／速度淨幅／轉向區間／角速度區間／初末速上限），車隊可獨立調校而不動演算法">參數化決策樹</span>
       <span class="hchip m" data-tip="每一筆判定都能攤成「實測值 vs 門檻」的關卡清單（見下方決策樹面板），可逐案覆核，不是黑箱分數">可解釋規則判定</span>
@@ -519,7 +519,7 @@
 
     <div class="charts">
       <div class="chart">
-        <h4><b>加速度合力</b> √(accX²+accY²)　青線＝EMA 基線｜★＝連續三點平均峰值｜<span style="color:var(--danger)">嚴重度＝峰值−基線</span>｜紅帶＝峰值搜尋窗（T−2~+1s）</h4>
+        <h4><b>加速度合力</b> √(accX²+accY²)　青線＝EMA｜綠點＝基線取樣（T−2s 的 EMA 值）｜★＝連續三點平均峰值｜<span style="color:var(--danger)">嚴重度＝峰值−基線</span>｜紅帶＝峰值搜尋窗（T−2~+1s）</h4>
         <canvas id="chartAcc" height="170"></canvas>
       </div>
       <div class="chart">
@@ -559,13 +559,13 @@
       <div class="pnode cloud">
         <div class="pn-step">特徵</div>
         <div class="pn-title">三組窗內特徵</div>
-        <div class="pn-sub">嚴重度（峰值−基線）・速度<b>最佳單調段</b>・淨轉向＋角速度</div>
+        <div class="pn-sub">嚴重度（加速度峰值−基線）・速度<b>最佳單調段</b>・淨轉向＋角速度</div>
       </div>
       <div class="parrow"></div>
       <div class="pnode final">
         <div class="pn-step">分類</div>
         <div class="pn-title">決策樹</div>
-        <div class="pn-sub">轉彎四關卡優先 → 速度兩候選各自過關 → <b>急煞/急加速/急轉彎</b>，皆不成立則過濾</div>
+        <div class="pn-sub">轉彎四關卡（淨轉向・角速度・嚴重度・末速）全過＝<b>急轉彎</b>；否則急煞（嚴重度・減速淨幅・末速）／急加速（嚴重度・加速淨幅・初速）各自過三關；皆不成立則過濾</div>
       </div>
     </div>
     <div class="keynote">
@@ -972,12 +972,20 @@ function drawCharts() {
     // 原始合力 + EMA
     polyline(ctx, xs, cs.acc.map(y), "rgba(226,232,240,.8)", 1.4);
     polyline(ctx, xs, cs.ema.map(y), C.cyan, 2);
-    ctx.fillStyle = C.cyan; ctx.fillText("EMA 基線", xs[Math.floor(xs.length*.13)], y(cs.ema[Math.floor(xs.length*.13)]) - 6);
+    ctx.fillStyle = C.cyan; ctx.fillText("EMA", xs[Math.floor(xs.length*.62)], y(cs.ema[Math.floor(xs.length*.62)]) - 6);   // 標在曲線後段, 免得與左側「基線取樣」標籤打架
     // baseline 虛線 + 峰值星星 + severity 標註
     const bl = cs.algo.baseline;
     ctx.strokeStyle = C.green; ctx.setLineDash([3, 4]); ctx.globalAlpha = .8;
     ctx.beginPath(); ctx.moveTo(PAD.l, y(bl)); ctx.lineTo(w - PAD.r, y(bl)); ctx.stroke();
     ctx.setLineDash([]); ctx.globalAlpha = 1;
+    // 基線取樣點: 演算法取「觸發前 2 秒」那一點的 EMA 值當基線 (algo emaPreSec=2.0), 不是在 T 取——標出來免誤會
+    const tb = cs.tTrig - 2.0, xb = xS(tb, w), yb = y(bl);
+    ctx.strokeStyle = C.green; ctx.setLineDash([2, 3]); ctx.globalAlpha = .9;
+    ctx.beginPath(); ctx.moveTo(xb, PAD.t); ctx.lineTo(xb, h - PAD.b); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    ctx.fillStyle = C.green; ctx.beginPath(); ctx.arc(xb, yb, 3.5, 0, 7); ctx.fill();
+    ctx.font = "bold 10px Consolas,monospace";
+    ctx.fillText("基線取樣 T−2s", Math.max(PAD.l + 2, xb - 92), yb - 8);
     const sx0 = xS(cs.starT, w), syP = y(cs.algo.peak_smooth), syB = y(bl);
     ctx.strokeStyle = C.danger; ctx.lineWidth = 1.6;
     ctx.beginPath(); ctx.moveTo(sx0, syP); ctx.lineTo(sx0, syB); ctx.stroke(); ctx.lineWidth = 1;

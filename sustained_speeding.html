@@ -411,6 +411,7 @@ body.thumbmode #hud { top: 14px; right: 14px; }   /* 實測封面 1264px 地圖�
       <span class="hchip m" title="車機影像模型判別當下是市區或快速道路（Location Type），無圖資時決定退回哪個預設速限">影像場景分類（市區／快速道路）</span>
       <span class="hchip m" title="判定速度＝GPS 速度 − 速度誤差（speed−speedAccuracy）取保守下界，並要求定位誤差 &lt;15 m、速度誤差 &lt;2 m/s、影像判定移動中">GPS 誤差感知判定</span>
       <span class="hchip m" title="超速點連成「頭尾皆超速、佔比 &gt;50%」的視窗，滿 30 秒上報；速限變換即重置">30 秒滑動視窗</span>
+      <span class="hchip m" title="匹配到的速限升高立刻採用、降低要連續 8 次（40 秒）才採用，中間沿用前一條路段——快速道路與平面道路上下重疊時 GPS 飄移會讓匹配在 70／50 間跳動，非對稱設計讓誤判只往「不冤枉駕駛」的方向發生">非對稱遲滯去抖動</span>
       <span class="hchip r" title="四週 1,696 筆上線上報事件全數逐筆人工檢視">1,696 筆全量人工檢視</span>
       <span class="hchip r" title="32 筆誤判，多為圖資速限標錯（16）與人工標記錯誤（7）">誤判率 1.9%</span>
       <span class="hchip r" title="可歸咎演算法的僅 7 筆（無圖資退預設 6、路型判別 1）">歸咎演算法 0.4%</span>
