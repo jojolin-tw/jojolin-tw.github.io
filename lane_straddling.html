@@ -122,6 +122,8 @@
   .hud-verdict { top: 4.9rem; right: .7rem; font-size: .95rem; display: none; }
   .hud-verdict.violation { color: var(--danger); border-color: rgba(248,113,113,.6); }
   .hud-verdict.ok { color: var(--green); border-color: rgba(52,211,153,.6); }
+  .hud-live .frm::before { content: "｜"; }
+  #hud-frame { display: contents; }   /* 讓 .src/.frm 直接成為 flex 子項, 手機版才能整段換行 */
   .hud-live { bottom: .7rem; left: .7rem; display: flex; align-items: center; gap: .45rem;
     font-size: .78rem; color: var(--green); }
   .hud-live .dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--green);
@@ -320,8 +322,11 @@
     .pl-item { flex: 0 0 15.5rem; grid-template-columns: 5.2rem minmax(0, 1fr); padding: .5rem; }
     .pl-item img { width: 5.2rem; }
     .pl-title { -webkit-line-clamp: 3; font-size: .78rem; }
-    .hud { font-size: .78rem; padding: .18rem .5rem; }
-    .hud-ar .num, .hud-evid .num { font-size: 1rem; }
+    .hud { font-size: .7rem; padding: .16rem .45rem; }
+    .hud-live { flex-wrap: wrap; row-gap: 0; column-gap: .4rem; max-width: 52%; line-height: 1.25; }
+    .hud-live .frm { flex: 0 0 100%; padding-left: .9rem; }
+    .hud-live .frm::before { content: ""; }
+    .hud-ar .num, .hud-evid .num { font-size: .9rem; }
     .hud-ar .lbl, .hud-evid .lbl { display: none; }
     .hud-verdict { top: 3.1rem; }
     .controls .hint { display: none; }
@@ -451,7 +456,7 @@
           <span class="bar"><i id="hud-evid-bar"></i></span>
         </div>
         <div id="hud-verdict" class="hud hud-verdict"></div>
-        <div class="hud hud-live" data-tip="畫面上的框線、遮罩、數據與下方曲線都由網頁以演算法逐幀輸出即時繪製，與影片同步——可逐幀驗證，不是烤好的字幕"><span class="dot"></span>車機演算法重現・推論幀 4 FPS</div>
+        <div class="hud hud-live" data-tip="畫面上的框線、遮罩、數據與下方曲線都由網頁以演算法逐幀輸出即時繪製，與影片同步——可逐幀驗證，不是烤好的字幕"><span class="dot"></span><span id="hud-frame">車機演算法重現・4 FPS</span></div>
       </div>
       <canvas id="scrub"></canvas>
       <div class="controls">
@@ -1103,6 +1108,12 @@ function drawCursors(t) {
   });
 }
 
+const hudFrame = document.getElementById("hud-frame");
+// 左下角活徽章全站同格式: 來源端・取樣率｜第 n/N 幀 (手機版換行成兩排)
+function setLive(src, i, n, unit) {
+  hudFrame.innerHTML = '<span class="src">' + src + '</span><span class="frm">第 ' + i + '/' + n + ' ' + unit + '</span>';
+}
+
 // ---- 主迴圈 ----
 let lastFrame = -1;
 function tick() {
@@ -1111,6 +1122,7 @@ function tick() {
   const f = cs.frames[fi];
   if (fi !== lastFrame) {
     lastFrame = fi;
+    setLive("車機演算法重現・4 FPS", fi + 1, cs.frames.length, "幀");
     const ar = f[2];
     hudAr.textContent = ar == null ? "—" : ar.toFixed(2);
     hudAr.className = "num" + (ar != null && ar < THETA ? " press" : (ar != null && ar < THETA_SOFT ? " soft" : ""));

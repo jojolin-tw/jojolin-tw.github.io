@@ -114,6 +114,8 @@
   .hud-speed .lbl { color: var(--muted); font-size: .72rem; font-weight: 400; display: block; }
   .hud-verdict { top: .7rem; right: .7rem; }
   .hud-verdict .st-hit { color: var(--danger); }
+  .hud-live .frm::before { content: "｜"; }
+  #hud-frame { display: contents; }   /* 讓 .src/.frm 直接成為 flex 子項, 手機版才能整段換行 */
   .hud-live { bottom: .7rem; left: .7rem; display: flex; align-items: center; gap: .45rem;
     font-size: .78rem; color: var(--green); }
   .hud-live .dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--green);
@@ -332,8 +334,11 @@
     .pl-item { flex: 0 0 15.5rem; grid-template-columns: 5.2rem minmax(0, 1fr); padding: .5rem; }
     .pl-item img { width: 5.2rem; }
     .pl-title { -webkit-line-clamp: 3; font-size: .78rem; }
-    .hud { font-size: .78rem; padding: .18rem .5rem; }
-    .hud-speed .num { font-size: 1rem; }
+    .hud { font-size: .7rem; padding: .16rem .45rem; }
+    .hud-live { flex-wrap: wrap; row-gap: 0; column-gap: .4rem; max-width: 52%; line-height: 1.25; }
+    .hud-live .frm { flex: 0 0 100%; padding-left: .9rem; }
+    .hud-live .frm::before { content: ""; }
+    .hud-speed .num { font-size: .9rem; }
     .hud-speed .lbl { display: none; }
     .meters canvas { width: 4.6rem; height: 4.6rem; }
     .meters { gap: .35rem; }
@@ -639,6 +644,10 @@ const hudAcc = document.getElementById("hud-acc");
 const hudSpd = document.getElementById("hud-spd");
 const hudVerdict = document.getElementById("hud-verdict");
 const hudFrame = document.getElementById("hud-frame");
+// 左下角活徽章全站同格式: 來源端・取樣率｜第 n/N 幀 (手機版換行成兩排)
+function setLive(src, i, n, unit) {
+  hudFrame.innerHTML = '<span class="src">' + src + '</span><span class="frm">第 ' + i + '/' + n + ' ' + unit + '</span>';
+}
 const cvAcc = document.getElementById("chartAcc");
 const cvSpd = document.getElementById("chartSpd");
 const cvYaw = document.getElementById("chartYaw");
@@ -1151,7 +1160,7 @@ function tick() {
   }
   const n = cs.vt.length;
   const fNow = Math.max(1, Math.min(n, idxAt(t) + 1));
-  hudFrame.textContent = "車機演算法重現・IMU 5 Hz｜取樣 " + fNow + "/" + n;
+  setLive("車機演算法重現・IMU 5 Hz", fNow, n, "點");
   drawGmag(t);
   drawHeading(t);
   drawScrub(t);
