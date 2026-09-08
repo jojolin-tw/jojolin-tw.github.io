@@ -186,8 +186,8 @@ kbd{
 }
 .darkbase { filter: invert(1) hue-rotate(180deg) brightness(.88) contrast(.92) saturate(.55); }
 .leaflet-container { background: #0d1526; }
-@media (min-width: 2200px) { header, #introbar, #vpane, aside, footer { zoom: 1.3; } }
-@media (min-width: 3200px) { header, #introbar, #vpane, aside, footer { zoom: 1.75; } }
+@media (min-width: 2200px) { header, #introbar, #vpane, aside, footer { zoom: 1.3; } #hud { zoom: 1.35; } }
+@media (min-width: 3200px) { header, #introbar, #vpane, aside, footer { zoom: 1.75; } #hud { zoom: 2.15; } }
 
 
 /* 左欄頂端摘要＋關鍵字 (與其他分頁 hero 同語言: 藍＝技術、綠＝成果) */
@@ -289,7 +289,7 @@ body.thumbmode #vpip .vcard { display: none; } body.thumbmode #vpip .vcard.activ
 body.thumbmode #vpip .pipbtn, body.thumbmode #vpip .pipnone { display: none; }
 body.thumbmode #vpip .vcap { display: flex; flex-direction: column; padding: 4px 8px; background: rgba(11,14,19,.9); font-size: 11px; color: var(--tx3); }
 body.thumbmode #vpip .vcap b { color: var(--tx); font-size: 12px; }
-body.thumbmode #hud { top: 14px; right: 14px; transform: scale(1.25); transform-origin: top right; }
+body.thumbmode #hud { top: 14px; right: 14px; }   /* 實測封面 1264px 地圖上 HUD 212px = 16.8%, 與桌機 1920 的 17.3% 一致, 不再放大 */
 /* 手機專用元件, 桌機一律隱藏 */
 #vpip, #infoSheet, #mstrip, #mgps { display: none; }
 

@@ -1216,7 +1216,16 @@ selectCase(0, false);
   apply();
 })();
 
-if (location.hash.includes("thumb")) document.body.classList.add("thumbmode");
+if (location.hash.includes("thumb")) {
+  document.body.classList.add("thumbmode");
+  // 封面/hover 預覽比例對齊桌機 (2026-09-08 使用者要求): 桌機 1920/2K/4K 實測「root 字級 ÷ 影片寬」恆為 0.0171,
+  // 封面 1280 視窗只有 0.0120 (角落 HUD/儀表小三成) → 依影片實際寬度設 root 字級; HUD/儀表全用 rem, 會跟著放大。
+  // 手機版不受影響 (只在 thumb hash 下生效)。
+  requestAnimationFrame(() => {
+    const w = document.querySelector(".videoWrap");
+    if (w && w.clientWidth) document.documentElement.style.fontSize = (0.0171 * w.clientWidth).toFixed(2) + "px";
+  });
+}
 const mC = location.hash.match(/c=(\d+)/);   // #c=N 直接切到第 N 個案例 (封面截圖用)
 if (mC) selectCase(+mC[1] - 1, false);
 const mT = location.hash.match(/t=([\d.]+)/);
