@@ -92,7 +92,7 @@
     <a class="card" href="harsh_driving.html">
       <div class="thumb">
         <img src="assets/videos/harsh_driving/cover.jpg" alt="急駕駛事件偵測 演算法畫面" loading="lazy">
-        <video class="pv" data-src="assets/videos/harsh_driving/case1.mp4" data-t="10.5" muted loop playsinline preload="none"></video>
+        <video class="pv" data-src="assets/videos/harsh_driving/preview.mp4" data-t="0" muted loop playsinline preload="none"></video>
       </div>
       <div class="body">
         <h2>急駕駛事件偵測<span class="go">→</span></h2>
@@ -104,7 +104,7 @@
     <a class="card" href="near_collision.html">
       <div class="thumb">
         <img src="assets/videos/near_collision/cover.jpg" alt="接近碰撞偵測 演算法畫面" loading="lazy">
-        <video class="pv" data-src="assets/videos/near_collision/case1.mp4" data-t="12.0" muted loop playsinline preload="none"></video>
+        <video class="pv" data-src="assets/videos/near_collision/preview.mp4" data-t="0" muted loop playsinline preload="none"></video>
       </div>
       <div class="body">
         <h2>接近碰撞偵測<span class="go">→</span></h2>
@@ -116,7 +116,7 @@
     <a class="card" href="rolling_stop_jp.html">
       <div class="thumb">
         <img src="assets/videos/rolling_stop_jp/cover.jpg" alt="停止標誌未停讓偵測 演算法畫面" loading="lazy">
-        <video class="pv" data-src="assets/videos/rolling_stop_jp/case1.mp4" data-t="12" muted loop playsinline preload="none"></video>
+        <video class="pv" data-src="assets/videos/rolling_stop_jp/preview.mp4" data-t="0" muted loop playsinline preload="none"></video>
       </div>
       <div class="body">
         <h2>停止標誌未停讓偵測<span class="go">→</span></h2>
@@ -128,7 +128,7 @@
     <a class="card" href="sustained_speeding.html">
       <div class="thumb">
         <img src="assets/videos/sustained_speeding/cover.jpg" alt="持續超速偵測 演算法畫面" loading="lazy">
-        <video class="pv" data-src="assets/videos/sustained_speeding/pairA.mp4" data-t="20" muted loop playsinline preload="none"></video>
+        <video class="pv" data-src="assets/videos/sustained_speeding/preview.mp4" data-t="0" muted loop playsinline preload="none"></video>
       </div>
       <div class="body">
         <h2>持續超速偵測<span class="go">→</span></h2>
@@ -140,7 +140,7 @@
     <a class="card" href="lane_straddling.html">
       <div class="thumb">
         <img src="assets/videos/lane_straddling/cover.jpg" alt="持續壓線偵測 演算法畫面" loading="lazy">
-        <video class="pv" data-src="assets/videos/lane_straddling/case1.mp4" data-t="15" muted loop playsinline preload="none"></video>
+        <video class="pv" data-src="assets/videos/lane_straddling/preview.mp4" data-t="0" muted loop playsinline preload="none"></video>
       </div>
       <div class="body">
         <h2>持續壓線偵測<span class="go">→</span></h2>
@@ -164,7 +164,7 @@ if (matchMedia('(hover: hover)').matches) {
     if (!v) return;
     card.addEventListener('mouseenter', () => {
       if (!v.src) { v.src = v.dataset.src; v.addEventListener('loadedmetadata', () => {
-        v.currentTime = Math.max(0, Math.min(v.duration - 4, +v.dataset.t - 2)); }, { once: true }); }
+        v.currentTime = Math.max(0, Math.min(Math.max(0, v.duration - 4), +v.dataset.t - 2)); }, { once: true }); }
       v.play().then(() => v.classList.add('ready')).catch(() => {});
     });
     card.addEventListener('mouseleave', () => { v.pause(); v.classList.remove('ready'); });

@@ -1004,7 +1004,8 @@ function render() {
 
 function go(i) {
   cur = Math.max(0, Math.min(P.length - 1, i));
-  history.replaceState(null, '', '#' + cur);   // 網址帶索引，方便回到同一個時間點
+  clearTimeout(window.__hashT);   // 防抖: 拖曳中不連發 replaceState (iOS Safari 30 秒 100 次上限)
+  window.__hashT = setTimeout(() => { try { history.replaceState(null, '', '#' + cur); } catch (_) {} }, 250);
   render();
 }
 
@@ -1048,11 +1049,12 @@ $('bAll').onclick = () => {
 
 cv.onclick = e => {
   const r = cv.getBoundingClientRect();
+  if (!r.width) return;   // 時間軸隱藏時寬 0, 換算會得 NaN 索引
   go(Math.round((e.clientX - r.left) / r.width * (P.length - 1)));
 };
 let dragging = false;
-cv.onpointerdown = e => { dragging = true; cv.setPointerCapture(e.pointerId); cv.onclick(e); };
-cv.onpointerup = cv.onpointercancel = () => dragging = false;
+cv.onpointerdown = e => { dragging = true; window.__scrubbing = true; cv.setPointerCapture(e.pointerId); cv.onclick(e); };
+cv.onpointerup = cv.onpointercancel = () => { dragging = false; window.__scrubbing = false; if (typeof syncVideosFromReplay === 'function') syncVideosFromReplay(); };
 cv.onpointermove = e => { if (dragging) cv.onclick(e); };
 
 window.addEventListener('keydown', e => {
@@ -1199,7 +1201,8 @@ function syncVideosFromReplay() {
   for (const v of VIDEOS) {
     const inWin = ms >= v.t0 - 2500 && ms <= v.t1 + 2500;
     v.mask.style.display = inWin ? 'none' : 'flex';
-    if (inWin && vidMaster !== v) vidSeek(v, (ms - v.t0) / 1000);
+    // 拖曳時間軸期間不逐格 seek 影片 (iOS 兩支影片連續 seek 會拖慢整個手勢), 放開時補一次
+    if (inWin && vidMaster !== v && !window.__scrubbing) vidSeek(v, (ms - v.t0) / 1000);
   }
 }
 /* 使用者操作回放（時間軸/逐步/回放播放鍵計時器）→ 影片讓出主導、跟著跳。
@@ -1284,19 +1287,32 @@ else syncVideosFromReplay();
       if (P[i].t >= w.t0 - 2500 && P[i].t <= w.t1 + 2500 && winInfo(i).sec >= WIN_THRESHOLD) return i;
     return -1;
   }).filter(i => i >= 0);
-  let lastCur = -1;
+  let lastCur = -1, autoFollowPending = false, initIdx = -1;
+  const mq0 = matchMedia('(max-aspect-ratio: 1/1)');
+  // 開頁預設看全程 (2026-09-08 使用者裁定); 封面模式除外
+  if (!/thumb/.test(window.__initHash || '')) {
+    window.addEventListener('load', () => setTimeout(() => {
+      initIdx = cur; autoFollowPending = true;
+      follow = false; $('bFollow').style.opacity = .45;
+      map.invalidateSize(); map.fitBounds(allBounds, { padding: [30, 30], animate: false });
+      // 手機全程視野下 geo_index 網格標籤太吵, 預設關 (網格鈕手機版本就隱藏)
+      if (mq0.matches && map.hasLayer(gGrid)) map.removeLayer(gGrid);
+    }, 0));
+    $('bFollow').addEventListener('click', () => { autoFollowPending = false; });
+  }
   // 時間軸畫上報旗標 (包裝模板 drawStrip; 原 resize 監聽抓的是舊參考, 另掛一個)
   const _drawStrip = drawStrip;
   drawStrip = function () {
     _drawStrip();
     const W = cv.clientWidth, n = P.length;
     cx.save(); cx.font = '800 11.5px "Noto Sans TC","Microsoft JhengHei",sans-serif'; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+    const colW = W / n;   // 與模板 drawStrip 同一套 x 映射 (i * bw), 旗標對準該點整欄
     FIRE_IDX.forEach((fi, k) => {
-      const x = (fi + 0.5) / n * W, label = '事件' + '一二三四'[k] + ' 上報', tw = cx.measureText(label).width;
-      cx.fillStyle = '#ff4d4f';
-      cx.fillRect(x - 1, 0, 2, cv.clientHeight);
-      // 標籤放在旗標右側的紅底白字膠囊, 靠右緣時翻到左側
-      const bw = tw + 14, bh = 17, bx = x + bw + 6 > W ? x - 6 - bw : x + 6, by = 3;
+      const x = fi * colW + colW / 2, label = '事件' + '一二三四'[k] + ' 上報', tw = cx.measureText(label).width;
+      cx.fillStyle = 'rgba(255,77,79,.35)'; cx.fillRect(fi * colW, 0, Math.max(colW, 2), cv.clientHeight);   // 整欄高亮
+      cx.fillStyle = '#ff4d4f'; cx.fillRect(x - 1, 0, 2, cv.clientHeight);
+      // 標籤置中在紅線正上方 (不再左右掛, 位置才不會看起來歪), 貼近邊緣時夾在畫布內
+      const bw = tw + 14, bh = 17, bx = Math.max(2, Math.min(W - bw - 2, x - bw / 2)), by = 2;
       cx.fillStyle = 'rgba(11,14,19,.92)'; cx.strokeStyle = '#ff4d4f'; cx.lineWidth = 1.5;
       cx.beginPath(); cx.roundRect(bx, by, bw, bh, 4); cx.fill(); cx.stroke();
       cx.fillStyle = '#fff'; cx.fillText(label, bx + bw / 2, by + bh / 2 + 0.5);
@@ -1355,6 +1371,11 @@ else syncVideosFromReplay();
       : '視窗累積 ' + w.sec.toFixed(0) + ' s／門檻 ' + WIN_THRESHOLD + ' s';
     if (cur !== lastCur) {
       if (FIRE_IDX.includes(cur)) { hud.classList.remove('fire'); void hud.offsetWidth; hud.classList.add('fire'); }
+      // 開頁看全程 (follow 關); 游標一離開起點就自動恢復跟隨 (使用者按過跟隨鈕則不再干預)
+      if (autoFollowPending && lastCur >= 0 && cur !== initIdx) {
+        autoFollowPending = false;
+        if (!follow) { follow = true; $('bFollow').style.opacity = 1; map.setView([pt.lat, pt.lon], Math.max(map.getZoom(), 17), { animate: false }); }
+      }
       lastCur = cur;
     }
     // 桌機 header 中段也放事件狀態 (手機版另有資訊條)
@@ -1377,6 +1398,14 @@ else syncVideosFromReplay();
   new MutationObserver(schedule).observe(document.querySelector('#body > aside:not(#vpane)'),
     { subtree: true, childList: true, characterData: true });
   schedule();
+})();
+
+/* 底部滑桿拖曳中同樣暫停影片 seek (與時間軸 canvas 同一保護), 放開補一次 */
+(function () {
+  const sl = $('slider');
+  sl.addEventListener('pointerdown', () => { window.__scrubbing = true; });
+  const done = () => { window.__scrubbing = false; syncVideosFromReplay(); };
+  sl.addEventListener('pointerup', done); sl.addEventListener('pointercancel', done); sl.addEventListener('change', done);
 })();
 
 /* ---------- 手機版: 影片小窗 + 說明全屏層 (元素搬移, 切回桌機時歸位) ---------- */

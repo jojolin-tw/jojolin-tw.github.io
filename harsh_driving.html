@@ -128,7 +128,7 @@
 
   /* 下滑凍結: 影片大半捲出視窗頂端後, 固定成右上角小窗續播 (pip 類由頁尾 JS 掛上) */
   .videoWrap.pip {
-    position: fixed; bottom: .6rem; right: .6rem; width: min(54rem, 72vw);
+    position: fixed; top: .6rem; right: .6rem; width: min(54rem, 72vw);   /* 2026-09-08 使用者裁定固定右上 */
     z-index: 940; box-shadow: 0 14px 44px rgba(0,0,0,.65); cursor: grab;
   }
   .videoWrap.pip .hud, .videoWrap.pip .meters { zoom: .85; }
@@ -145,7 +145,7 @@
   .videoWrap.pip { transition: transform .25s; touch-action: pan-y; }
   .videoWrap.pip.pipmin { transform: translateX(calc(100% + 1rem)); }
   .pipTab {
-    position: fixed; right: 0; bottom: 3rem; z-index: 941; writing-mode: vertical-rl;
+    position: fixed; right: 0; top: 3rem; z-index: 941; writing-mode: vertical-rl;
     padding: .8rem .3rem; font: inherit; font-size: .85rem; letter-spacing: 3px;
     color: var(--text); background: var(--card); border: 1px solid var(--line);
     border-right: none; border-radius: 10px 0 0 10px; cursor: pointer;
@@ -159,13 +159,13 @@
   .pipGhost div { position: absolute; inset: 0; display: flex; align-items: center;
     justify-content: center; color: var(--muted); font-size: .95rem; text-shadow: 0 1px 6px #000; }
   .pipGhost:hover div { color: var(--text); }
-  /* pip 控制: 左上尺寸切換 (hover 浮現)、右上「右滑可隱藏」提示 (首次自動示 3 秒) */
-  /* 小窗上緣外側的小舌片: 左=尺寸切換鈕、右=右滑提示 (同款設計) */
+  /* pip 控制: 小窗「下緣」外側的小舌片 (小窗 2026-09-08 改固定右上, 舌片跟著翻到下方):
+     左下=尺寸切換鈕、右下=「右滑可隱藏」提示 */
   .pipCtl, .pipHint { display: none; }
   .pipCtl.on, .pipHint.on {
     display: block; position: fixed; z-index: 941;
     background: rgba(10,15,28,.85); border: 1px solid var(--line);
-    border-radius: 8px 8px 0 0; border-bottom: none; padding: .18rem .6rem;
+    border-radius: 0 0 8px 8px; border-top: none; padding: .18rem .6rem;
     font-size: .74rem;
   }
   .pipHint.on { color: var(--muted); pointer-events: none; }
@@ -1225,14 +1225,14 @@ selectCase(0, false);
   document.body.append(pipCtl, pipHint);   // 常駐貼在小窗上緣外側 (wrap overflow:hidden 放不了)
   function placeHint() {
     // 不用 getBoundingClientRect 的水平位置——展開動畫中 transform 會把它量到畫面外;
-    // 小窗固定右下 .6rem, 位置可直接算 (高度不受 translateX 影響)
+    // 小窗固定右上 .6rem, 舌片貼在小窗下緣: top = .6rem + 小窗高 (高度不受 translateX 影響)
     if (!pipHint.classList.contains("on")) return;
     const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
     const r = wrap.getBoundingClientRect();     // width/height 不受 translateX 影響
     pipHint.style.right = (0.6 * rem) + "px";
-    pipHint.style.bottom = (0.6 * rem + r.height) + "px";
+    pipHint.style.top = (0.6 * rem + r.height) + "px";
     pipCtl.style.left = (innerWidth - 0.6 * rem - r.width) + "px";
-    pipCtl.style.bottom = (0.6 * rem + r.height) + "px";
+    pipCtl.style.top = (0.6 * rem + r.height) + "px";
   }
   addEventListener("resize", placeHint);
   const PIP_SIZE = "showcasePipSize";
@@ -1298,17 +1298,18 @@ selectCase(0, false);
     wrap.style.transform = "";
   }
   // 唯一手勢: 往右拖 (dx>8px 才算), 超過 40% 寬放開 = 收合, 否則彈回
-  let pipDrag = false, pipMoved = false, pipX0 = 0, pipXLast = 0;
+  let pipDrag = false, pipMoved = false, pipX0 = 0, pipXLast = 0, pipPid = null;
   wrap.addEventListener("pointerdown", e => {
     if (!wrap.classList.contains("pip") || wrap.classList.contains("pipmin") || e.target === scrub || e.target === pipCtl) return;
-    pipDrag = true; pipMoved = false; pipX0 = pipXLast = e.clientX;
-    try { wrap.setPointerCapture(e.pointerId); } catch (_) {}   // 手指滑出小窗仍收得到 move/up
+    pipDrag = true; pipMoved = false; pipX0 = pipXLast = e.clientX; pipPid = e.pointerId;
+    // 注意: 不能在這裡就 setPointerCapture——捕捉後 click 會改派給 wrap, 影片元素的「點擊播放/暫停」就收不到
   });
   addEventListener("pointermove", e => {
     if (!pipDrag) return;
     pipXLast = e.clientX;
     const dx = e.clientX - pipX0;
     if (!pipMoved && dx < 8) return;
+    if (!pipMoved) { try { wrap.setPointerCapture(pipPid); } catch (_) {} }   // 確定是拖曳才捕捉: 手指滑出小窗仍收得到 move/up
     pipMoved = true;
     wrap.style.transition = pipCtl.style.transition = "none";
     const t = dx > 0 ? "translateX(" + dx + "px)" : "";
@@ -1322,6 +1323,7 @@ selectCase(0, false);
     wrap.style.transition = ""; pipCtl.style.transition = "transform .25s";
     pipCtl.style.transform = "";
     const x = (e.type === "pointercancel" || e.clientX == null) ? pipXLast : e.clientX;
+    if (e.type === "pointercancel") pipMoved = false;   // cancel 後不會有 click 跟著來, 不能留著等 click 去清, 否則下一次點擊被吞
     // 門檻只需防「點暫停時手滑」——40px 已遠大於點擊抖動 (拖曳判定 8px)
     if (x - pipX0 > 40) collapsePip();
     else wrap.style.transform = "";
