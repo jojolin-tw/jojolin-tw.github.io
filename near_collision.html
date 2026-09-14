@@ -401,38 +401,30 @@
       <rect x="20" y="214" width="1140" height="250" rx="12" fill="rgba(52,211,153,.05)" stroke="#334155"/>
       <text x="36" y="240" fill="#34d399" font-size="12.5" font-weight="800" letter-spacing="1.5">兩路並列判定（本頁重現的部分）・任一路成立即為接近碰撞</text>
 
-      <!-- row A: 前車 -->
+      <!-- row A: 前車 (核心＝卡爾曼濾波, 藍框) -->
       <rect x="40" y="258" width="210" height="64" rx="8" fill="#0f172a" stroke="#334155"/>
       <text x="145" y="285" fill="#e2e8f0" font-size="12.5" font-weight="700" text-anchor="middle">前車：單目測距</text>
-      <text x="145" y="304" fill="#94a3b8" font-size="10.5" text-anchor="middle">入場過濾・框寬 → 公尺・下緣 80% 線段判 ROI</text>
-      <rect x="290" y="258" width="210" height="64" rx="8" fill="#0f172a" stroke="#334155"/>
-      <text x="395" y="285" fill="#e2e8f0" font-size="12.5" font-weight="700" text-anchor="middle">多目標追蹤</text>
-      <text x="395" y="304" fill="#94a3b8" font-size="10.5" text-anchor="middle">跨幀綁定 trackId・每車一顆濾波器</text>
-      <rect x="540" y="258" width="210" height="64" rx="8" fill="#0f172a" stroke="#38bdf8"/>
-      <text x="645" y="285" fill="#38bdf8" font-size="12.5" font-weight="700" text-anchor="middle">卡爾曼濾波</text>
-      <text x="645" y="304" fill="#94a3b8" font-size="10.5" text-anchor="middle">狀態＝[距離, 相對速度]，只量距離</text>
+      <text x="145" y="304" fill="#94a3b8" font-size="10.5" text-anchor="middle">框寬 ∝ 1／距離・逐幀鋸齒・依 trackId 追蹤</text>
+      <rect x="290" y="258" width="460" height="64" rx="8" fill="rgba(56,189,248,.06)" stroke="#38bdf8"/>
+      <text x="520" y="285" fill="#38bdf8" font-size="12.5" font-weight="700" text-anchor="middle">卡爾曼濾波（核心）：平滑距離＋接近率</text>
+      <text x="520" y="304" fill="#94a3b8" font-size="10.5" text-anchor="middle">每車一顆・狀態＝[距離, 相對速度]・只量距離，速度由狀態解出・R 隨距離自適應</text>
       <rect x="790" y="258" width="210" height="64" rx="8" fill="#0f172a" stroke="#fbbf24"/>
-      <text x="895" y="285" fill="#fbbf24" font-size="12.5" font-weight="700" text-anchor="middle">前車條件・窗 [T−1, T＋5]</text>
-      <text x="895" y="304" fill="#94a3b8" font-size="10.5" text-anchor="middle">ROI≥3幀 ∧ ≤8 m ∧ 接近率≥0 ∧ 紀錄≥3</text>
+      <text x="895" y="285" fill="#fbbf24" font-size="12.5" font-weight="700" text-anchor="middle">前車條件</text>
+      <text x="895" y="304" fill="#94a3b8" font-size="10.5" text-anchor="middle">本車道 ROI ∧ ≤8 m ∧ 接近率≥0・多幀紀錄</text>
       <path d="M250 290 L286 290" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
-      <path d="M500 290 L536 290" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
       <path d="M750 290 L786 290" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
 
       <!-- row B: 行人／騎士 -->
       <rect x="40" y="338" width="210" height="64" rx="8" fill="#0f172a" stroke="#334155"/>
       <text x="145" y="365" fill="#e2e8f0" font-size="12.5" font-weight="700" text-anchor="middle">行人／騎士候選</text>
-      <text x="145" y="384" fill="#94a3b8" font-size="10.5" text-anchor="middle">conf≥0.5・框高≥80 px・長寬比 0.8～8</text>
-      <rect x="290" y="338" width="210" height="64" rx="8" fill="#0f172a" stroke="#334155"/>
-      <text x="395" y="365" fill="#e2e8f0" font-size="12.5" font-weight="700" text-anchor="middle">梯形 ROI 判定點</text>
-      <text x="395" y="384" fill="#94a3b8" font-size="10.5" text-anchor="middle">框底中點入 ROI・不測距，深度由幾何隱含</text>
-      <rect x="540" y="338" width="210" height="64" rx="8" fill="#0f172a" stroke="#a78bfa"/>
-      <text x="645" y="365" fill="#a78bfa" font-size="12.5" font-weight="700" text-anchor="middle">紀錄門檻</text>
-      <text x="645" y="384" fill="#94a3b8" font-size="10.5" text-anchor="middle">1 秒內 ≥2 幀在 ROI（數幀不數個體）</text>
+      <text x="145" y="384" fill="#94a3b8" font-size="10.5" text-anchor="middle">信心・框高・長寬比只擋離譜框</text>
+      <rect x="290" y="338" width="460" height="64" rx="8" fill="#0f172a" stroke="#a78bfa"/>
+      <text x="520" y="365" fill="#a78bfa" font-size="12.5" font-weight="700" text-anchor="middle">梯形 ROI 幾何判定：不測距</text>
+      <text x="520" y="384" fill="#94a3b8" font-size="10.5" text-anchor="middle">框高被遮擋合併灌水、距離不可信 → 框底在消失點驅動的梯形內＝已在車前近處</text>
       <rect x="790" y="338" width="210" height="64" rx="8" fill="#0f172a" stroke="#fbbf24"/>
-      <text x="895" y="365" fill="#fbbf24" font-size="12.5" font-weight="700" text-anchor="middle">行人條件・窗 [T−1, T＋1.5]</text>
-      <text x="895" y="384" fill="#94a3b8" font-size="10.5" text-anchor="middle">煞停後才走過車前的人不算</text>
+      <text x="895" y="365" fill="#fbbf24" font-size="12.5" font-weight="700" text-anchor="middle">行人條件</text>
+      <text x="895" y="384" fill="#94a3b8" font-size="10.5" text-anchor="middle">窗 T−1～T＋1.5・1 秒內 ≥2 幀在 ROI</text>
       <path d="M250 370 L286 370" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
-      <path d="M500 370 L536 370" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
       <path d="M750 370 L786 370" stroke="#94a3b8" stroke-width="1.6" fill="none" marker-end="url(#arr)"/>
 
       <!-- 結果: 兩列同時指向同一個結果框 (任一成立) -->
@@ -451,13 +443,13 @@
 
   <header class="hero">
     <h1>接近碰撞偵測：急煞觸發下的即時碰撞風險判定</h1>
-    <p class="sub">急煞本身不等於危險，真正要抓的是差點撞上<b>前車、行人或騎士</b>的瞬間。車機在急煞或急轉觸發後回看前方影像，
-    對兩類目標各走一條判定鏈、任一成立即上報。<b>前車</b>（判定窗 T−1～T＋5 s）：魚眼去畸變與透視校正還原幾何，偵測框寬換算單目距離，
-    手刻一維<b>卡爾曼濾波</b>（Kalman Filter，下稱 KF）解出平滑距離與接近率；目標在本車道 ROI 內累計 ≥3 幀、距離 ≤8 m、正在接近、
-    1.5 秒內紀錄 ≥3 幀即成立；ROI 判點取<b>框下緣中間 80% 線段</b>而非中點，前車偏半個車身也不漏。<b>行人與騎士</b>（判定窗 T−1～T＋1.5 s；模型將自行車與機車騎士歸為同一類）：不做測距——框高會被遮擋合併灌水——
-    改以消失點驅動的<b>梯形 ROI</b> 判定，框高 ≥80 px 的候選框底中點在 ROI 內、1 秒內紀錄 ≥2 幀即成立。
-    兩路共用<b>航向閘門</b>：判定窗內自車轉向超過 30° 代表鏡頭正在掃，該路不判。
-    兩個計程車隊 41 天內全部 423 筆急煞／急轉事件離線重跑並逐筆人工判定：整體 Precision 100%、Recall 87.8%（43 命中／0 誤判／6 漏抓）。
+    <p class="sub">急煞本身不等於危險，真正要抓的是差點撞上<b>前車、行人或騎士</b>的瞬間——只有一顆行車記錄器鏡頭、沒有雷達。
+    單目測距（框寬 ∝ 1／距離）逐幀鋸齒、直接拿來判「≤8 m 且正在接近」會誤判連連；核心是為每台被追蹤的前車配一顆手刻一維
+    <b>卡爾曼濾波</b>（Kalman Filter，下稱 KF）：只量測距離，狀態同時解出<b>平滑距離</b>與<b>接近率</b>（相對速度），
+    距離變準、接近率不必對雜訊做數值微分——這是前車判定準的關鍵。<b>前車</b>在本車道 ROI 內、KF 距離 ≤8 m、接近率 ≥0 即成立；
+    <b>行人與騎士</b>不測距（框高會被遮擋合併灌水），改以消失點驅動的<b>梯形 ROI</b> 做幾何判定；兩路共用<b>航向閘門</b>擋掉鏡頭正在掃的轉彎瞬間。
+    持續性門檻（多幀紀錄、判定窗）擋掉單幀閃爍與煞停後才經過的行人，細節見流程圖。
+    兩個計程車隊 41 天全部 423 筆急煞／急轉事件離線重跑並逐筆人工判定：Precision 100%、Recall 87.8%。
     下方是<b>可互動的演算法重現</b>：影片、偵測框、兩種 ROI、逐幀數據即時同步。</p>
     <div class="hero-chips">
       <span class="hchip m" data-tip="狀態向量 [距離, 相對速度]、等速度運動模型、Piecewise White Noise 製程雜訊；只量測距離，相對速度由 cross-covariance 反推。同一份 KalmanFilter.kt 驅動 FCW／跟車／接近碰撞三個功能">手刻 1D 卡爾曼濾波</span>
@@ -573,75 +565,67 @@
   <!-- ===== 說明區 ===== -->
   <section class="block">
     <h2>演算法：從急煞訊號到碰撞判定的管線</h2>
-    <p class="lead">急煞事件中只有一部分伴隨實際碰撞風險。演算法在急煞觸發的瞬間回看前方影像：對<b>前車</b>量化
-    距離與接近率；對<b>行人與騎士</b>改用梯形 ROI 的幾何判定——兩路並列、各有自己的判定窗，任一成立即為接近碰撞；
-    兩路共用一道航向閘門擋掉「邊轉彎邊掃到路邊」的情境。全部運算在車機上即時完成。</p>
+    <p class="lead">急煞事件中只有一部分伴隨實際碰撞風險。演算法在急煞觸發的瞬間回看前方影像：對<b>前車</b>以卡爾曼濾波解出
+    距離與接近率；對<b>行人與騎士</b>改用梯形 ROI 的幾何判定——兩路並列，任一成立即為接近碰撞；共用一道航向閘門擋掉「邊轉彎邊掃到路邊」。
+    全部運算在車機上即時完成。</p>
     <div class="pipeline">
       <div class="pnode edge">
         <div class="pn-step">觸發</div>
-        <div class="pn-title">急駕駛事件＋航向閘門</div>
-        <div class="pn-sub">IMU（慣性感測器）判定急煞/急轉，<b>嚴重度 ≥ 2.5</b> 才進入判定；判定窗內自車<b>轉向 &gt; 30°</b>＝鏡頭在掃，該路不判</div>
+        <div class="pn-title">急駕駛事件</div>
+        <div class="pn-sub">IMU（慣性感測器）判定急煞／急轉，<b>嚴重度 ≥ 2.5</b> 才回看影像；判定窗內自車<b>轉向 &gt; 30°</b>＝鏡頭在掃，不判</div>
       </div>
       <div class="parrow"></div>
       <div class="pnode edge">
         <div class="pn-step">幾何還原</div>
-        <div class="pn-title">校正＋消失點</div>
-        <div class="pn-sub">魚眼去畸變＋透視校正，<b>偵測框寬 → 公尺距離</b>；同一顆消失點撐起鉛筆形與梯形兩種 ROI；前車以<b>框下緣中間 80% 線段</b>判是否在 ROI 內</div>
+        <div class="pn-title">校正＋單目測距</div>
+        <div class="pn-sub">魚眼去畸變＋透視校正還原真實幾何，<b>偵測框寬 ∝ 1／距離</b> 換算公尺；同一顆消失點撐起鉛筆形（前車）與梯形（行人）兩種 ROI</div>
       </div>
       <div class="parrow"></div>
       <div class="pnode cloud">
-        <div class="pn-step">兩路並列</div>
-        <div class="pn-title">前車：追蹤＋卡爾曼｜行人／騎士：梯形 ROI</div>
-        <div class="pn-sub">每台車一顆 KF 解出<b>平滑距離＋接近率</b>；行人不測距，框高 ≥80 px 的候選看<b>判定點是否在 ROI 內</b></div>
+        <div class="pn-step">核心</div>
+        <div class="pn-title">卡爾曼濾波：平滑距離＋接近率</div>
+        <div class="pn-sub">每台追蹤中的前車一顆 KF，只量距離、狀態同時解出<b>距離與相對速度</b>——鋸齒量測變成可判定的訊號，接近率不靠數值微分</div>
       </div>
       <div class="parrow"></div>
       <div class="pnode final">
         <div class="pn-step">判定</div>
-        <div class="pn-title">任一路成立即上報</div>
-        <div class="pn-sub">前車（窗 T−1～T＋5）：ROI≥3幀 ∧ ≤8m ∧ 接近率≥0 ∧ 紀錄≥3；行人／騎士（窗 T−1～T＋1.5）：ROI ∧ 1 秒內紀錄≥2 → <b>接近碰撞成立</b></div>
+        <div class="pn-title">兩路任一成立即上報</div>
+        <div class="pn-sub">前車：本車道 ROI ∧ KF 距離 ≤8 m ∧ 接近率 ≥0；行人／騎士：框底在梯形 ROI 內（不測距）。各配多幀紀錄與判定窗擋單幀閃爍 → <b>接近碰撞成立</b></div>
       </div>
     </div>
     <div class="keynote">
-      <p><b>同一顆濾波器，驅動三個線上功能</b>：這套卡爾曼濾波（含距離自適應量測雜訊）與單目測距、
-      鉛筆 ROI，同時是線上<b>前車碰撞預警（FCW）</b>與<b>持續跟車偵測</b>的核心——
+      <p><b>為什麼距離準的關鍵是卡爾曼濾波</b>：單目測距只有「框寬 ∝ 1／距離」一條物理關係，偵測框每幀抖一兩個像素，換算出的距離就是一條鋸齒
+      （看下方距離圖的灰點）。KF 狀態向量取 [距離, 相對速度]、等速度運動模型，<b>只量測距離</b>，相對速度由狀態間的 cross-covariance 自然解出——
+      接近率因此是濾波器的輸出，不是對雜訊距離做差分；量測雜訊 R 再隨距離自適應（遠處視覺測距天生不準）。綠線與灰點的差距，就是這顆濾波器的價值。</p>
+      <p><b>同一顆濾波器，驅動三個線上功能</b>：這套 KF 與單目測距、鉛筆 ROI，同時是線上<b>前車碰撞預警（FCW）</b>與<b>持續跟車偵測</b>的核心——
       碰撞預警用它的<b>速度分量</b>（瞬時風險）、跟車偵測用它的<b>距離分量</b>（持續風險）、接近碰撞兩者都用。</p>
-      <p><b>行人為什麼不測距</b>：單目測距靠框寬或框高換算，行人的框會被欄杆、停車、遮擋物合併而灌水
-      （實測人行道上的行人估成 7.3 m，實際約 15 m）。距離不可信，就不要用距離——把「多近」的意義藏進幾何：
-      梯形 ROI 頂點在消失點、上緣截掉 80 px 等於地面約 9 m 外不看，判定點在 ROI 內＝人已在車前近處。
-      行人在車機追蹤器沒有 trackId，紀錄門檻因此不靠身分、只靠「1 秒內 ≥2 幀」——與前車「1.5 秒內 ≥3 幀」同一概念。</p>
-      <p><b>行人判定窗為什麼只到 T＋1.5 秒</b>：全量重跑 423 筆事件時，行人誤判幾乎都在 T＋1.7 秒之後才湊滿紀錄——
-      車已煞停、行人才慢慢走過車前；真實的接近碰撞則全在 T＋1.3 秒內成立。前車判定窗維持 T＋5 秒，因為前車在煞停後仍可能持續逼近。
-      再加上框高門檻 30 → 80 px（誤判主體是遠處小框）與航向閘門，行人誤判 33 筆 → 0 筆、整體 Precision 55.7% → 100%。</p>
-      <p><b>前車 ROI 判點為什麼從中點改成線段</b>：鉛筆形 ROI 底寬只有 110 px，6～7 m 的前車框寬 160～190 px——前車偏半個車身，
-      框底中點就滑出 ROI，人工複核的 14 筆前車漏抓有 9 筆是這種。改為<b>框下緣中間 80% 的水平線段碰到 ROI 即算在內</b>（與持續跟車偵測同一套幾何），
-      423 筆中救回 10 筆漏抓、0 筆新誤判；試過 100% 全寬則會把框邊擦到 ROI 的側邊車道車收進來（多 4 筆誤判）。ROI 累計 ≥3 幀的保險就是為這一步放寬而加。</p>
+      <p><b>行人為什麼不測距</b>：行人的框會被欄杆、停車、遮擋物合併而灌水（實測人行道上的行人估成 7.3 m，實際約 15 m）。距離不可信就不用距離——
+      把「多近」藏進幾何：梯形 ROI 頂點在消失點、上緣約 9 m 外不看，框底在 ROI 內＝人已在車前近處。</p>
+      <p><b>三個擋誤判的小設計</b>（皆以 423 筆全量重跑逐筆複核定案）：①行人判定窗只到 T＋1.5 秒——車煞停後才慢慢走過車前的人不算，行人誤判 33 → 0；
+      ②前車 ROI 判點取框下緣中間 80% 線段而非中點——前車偏半個車身不再漏，救回 10 筆、0 新誤判；③航向閘門——判定窗內自車轉向 &gt;30° 代表鏡頭正在掃路邊，該路不判。</p>
     </div>
   </section>
 
   <section class="block">
     <h2>演算法核心</h2>
-    <p class="lead">十個關鍵設計，把「一顆鏡頭」變成可靠的碰撞風險判定器。</p>
+    <p class="lead">八個關鍵設計，把「一顆鏡頭」變成可靠的碰撞風險判定器。</p>
     <div class="algo-list">
+      <div class="algo-item"><span class="ai-term">卡爾曼濾波（核心）</span>
+        <span class="ai-desc">狀態 [距離, 相對速度]，只量距離、速度由 cross-covariance 反推；量測雜訊 R 隨距離自適應——把鋸齒測距變成平滑距離與接近率</span></div>
+      <div class="algo-item"><span class="ai-term">單目測距</span>
+        <span class="ai-desc">偵測框寬 ∝ 1／距離，一顆鏡頭換算公尺，不需雷達或雙鏡頭</span></div>
       <div class="algo-item"><span class="ai-term">魚眼校正鏈路</span>
         <span class="ai-desc">undistort → untilt 透視變換，先還原真實幾何再測距；8 組數值單元測試逐一驗證</span></div>
-      <div class="algo-item"><span class="ai-term">單目測距</span>
-        <span class="ai-desc">偵測框寬度換算距離，不需雷達或雙鏡頭</span></div>
-      <div class="algo-item"><span class="ai-term">卡爾曼濾波</span>
-        <span class="ai-desc">只量距離，速度由 cross-covariance 反推；量測雜訊 R 隨距離自適應（遠處視覺測距天生不準）</span></div>
       <div class="algo-item"><span class="ai-term">消失點自適應 ROI</span>
-        <span class="ai-desc">鉛筆形 ROI 隨鏡頭消失點平移縮放，用「框下緣中間 80% 線段是否碰到 ROI」界定本車道（中點法會漏掉偏半個車身的前車）；判定窗內入 ROI 累計 ≥3 幀才可達標，旁車道被掃過一兩幀不成立</span></div>
+        <span class="ai-desc">鉛筆形 ROI 隨鏡頭消失點平移縮放界定本車道；判點取框下緣中間 80% 線段，偏半個車身的前車不漏、側車道不誤收</span></div>
       <div class="algo-item"><span class="ai-term">多目標追蹤</span>
         <span class="ai-desc">跨幀以最近鄰匹配綁定 trackId，每台車有自己的濾波器與歷史</span></div>
-      <div class="algo-item"><span class="ai-term">防閃爍紀錄門檻</span>
-        <span class="ai-desc">1.5 秒內看到 ≥3 幀才具資格——容單幀漏檢、擋單幀誤檢</span></div>
       <div class="algo-item"><span class="ai-term">消失點梯形 ROI（行人／騎士）</span>
-        <span class="ai-desc">頂點在消失點、底邊 832 px、上緣截 80 px；判定點在 ROI 內＝一筆紀錄，1 秒內 ≥2 筆成立——數幀不數個體，不依賴追蹤</span></div>
-      <div class="algo-item"><span class="ai-term">以幾何取代測距</span>
-        <span class="ai-desc">行人框高會被遮擋合併灌水，距離不可信；候選只擋離譜框：框高 ≥80 px（誤判幾乎都是遠處小框；真實橫越車前最矮的一筆 74～112 px，80 是撐到上限的值）、高／寬 0.8～8（騎士比行人矮胖）</span></div>
+        <span class="ai-desc">不測距（框高被遮擋合併灌水），框底在梯形 ROI 內即算近處；候選只擋離譜框（框高 ≥80 px、高／寬 0.8～8）</span></div>
       <div class="algo-item"><span class="ai-term">航向閘門（IMU yaw）</span>
-        <span class="ai-desc">急煞事件自帶 5 Hz 航向角，取判定窗頭尾差：&gt;30° 即該路不判。真實轉彎型案例窗內最多 24°（轉完才煞），誤判 47～141°（邊轉邊掃到路邊）</span></div>
-      <div class="algo-item"><span class="ai-term">判定窗分流</span>
-        <span class="ai-desc">前車 T−1～T＋5 s、行人 T−1～T＋1.5 s——煞停後才走過車前的行人不是接近碰撞；這一刀把行人誤判從 33 筆砍到 0</span></div>
+        <span class="ai-desc">急煞事件自帶 5 Hz 航向角，判定窗頭尾差 &gt;30° 即該路不判——真實案例窗內最多 24°，誤判 47～141°</span></div>
+      <div class="algo-item"><span class="ai-term">持續性門檻與判定窗</span>
+        <span class="ai-desc">前車 1.5 s 內 ≥3 幀紀錄且 ROI 內 ≥3 幀、行人 1 s 內 ≥2 幀；判定窗前車 T−1～T＋5 s、行人 T−1～T＋1.5 s——容單幀漏檢、擋單幀誤檢</span></div>
     </div>
     <div class="param">
       <div class="ph">決策參數：接近率門檻 <code>closingRateThreshold</code>（定案 0.0）</div>
