@@ -109,7 +109,7 @@
       <div class="body">
         <h2>接近碰撞偵測<span class="go">→</span></h2>
         <div class="big"><span class="bv">偵測「差點撞上前車、行人或騎士」的驚險瞬間</span><span class="bk">前車：魚眼校正＋單目測距＋手刻卡爾曼濾波；行人／騎士：梯形 ROI 幾何判定</span></div>
-        <p class="hook">急煞觸發後即時解出前車距離與接近率判定碰撞風險；行人／騎士不測距、改用梯形 ROI，兩路共用 IMU 航向閘門——全程車機端運算，423 筆真實事件全量重跑 Precision 90.9%、行人判定 0 誤判。</p>
+        <p class="hook">急煞觸發後即時解出前車距離與接近率判定碰撞風險；行人／騎士不測距、改用梯形 ROI，兩路共用 IMU 航向閘門——全程車機端運算，423 筆真實事件全量重跑並逐筆人工判定：Precision 100%、Recall 87.8%。</p>
         <div class="tags"><span class="tag">卡爾曼濾波</span><span class="tag">單目測距</span><span class="tag">魚眼校正</span><span class="tag">消失點自適應 ROI</span><span class="tag">航向閘門</span></div>
       </div>
     </a>
