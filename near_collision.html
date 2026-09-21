@@ -138,6 +138,15 @@
   .hud-live .dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--green);
     animation: livepulse 1.6s ease-in-out infinite; }
   @keyframes livepulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+  /* 緩衝指示 (2026-09-21 使用者要求, 全站影片頁同一段): 影片因網路載入停住 (waiting/stalled) 才浮出, 仿串流平台轉圈 */
+  .vbuf { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
+    gap: .6rem; pointer-events: none; background: rgba(10,15,28,.35); z-index: 5; }
+  .vbuf.on { display: flex; }
+  .vbuf .ring { width: 3rem; height: 3rem; border-radius: 50%; border: .28rem solid rgba(226,232,240,.25);
+    border-top-color: var(--blue); animation: vspin .9s linear infinite; }
+  .vbuf span { font-size: .8rem; color: var(--text); text-shadow: 0 1px 4px #000; }
+  @keyframes vspin { to { transform: rotate(360deg); } }
+  body.thumbmode .vbuf { display: none !important; }
 
   /* 下滑凍結: 影片大半捲出視窗頂端後, 固定成右上角小窗續播 (pip 類由頁尾 JS 掛上) */
   .videoWrap.pip {
@@ -470,6 +479,7 @@
       <div class="videoWrap">
         <video id="main-video" muted playsinline loop autoplay preload="auto"></video>
         <canvas id="overlay"></canvas>
+        <div class="vbuf" id="vbuf"><div class="ring"></div><span>影片緩衝中…（等待網路載入）</span></div>
         <div class="hud hud-dist" id="hud-card" data-tip="前車範例：卡爾曼平滑距離與接近率（正＝正在逼近），紅色＝已低於 8 m 門檻。行人範例：目標框高（越高越近，僅供感受，不是判定輸入）。下方燈號＝該路判定的每一條件，紅未過、綠通過">
           <span id="hud-dist" class="num">— m</span>
           <span class="lbl" id="hud-cr">接近率 —</span>
@@ -722,6 +732,17 @@ const C = { blue:"#38bdf8", green:"#34d399", warn:"#fbbf24", danger:"#f87171",
 
 let ci = 0, cs = CASES[0];
 const video = document.getElementById("main-video");
+// 緩衝指示: waiting/stalled 持續 250ms 才顯示 (避免 seek 瞬間閃一下), 播得動/暫停/換片即收;
+// 暫停中拖曳造成的 waiting 不顯示 (那不是網路問題)
+{
+  const buf = document.getElementById("vbuf");
+  let tmr = null;
+  const wantSpin = () => (!video.paused || video.autoplay) && video.readyState < 3;
+  const show = () => { if (tmr) return; tmr = setTimeout(() => { tmr = null; if (wantSpin()) buf.classList.add("on"); }, 250); };
+  const hide = () => { if (tmr) { clearTimeout(tmr); tmr = null; } buf.classList.remove("on"); };
+  ["waiting", "stalled", "loadstart"].forEach(e => video.addEventListener(e, show));
+  ["playing", "canplay", "pause", "emptied", "error", "ended"].forEach(e => video.addEventListener(e, hide));
+}
 const overlay = document.getElementById("overlay");
 const hudDist = document.getElementById("hud-dist");
 const hudCr = document.getElementById("hud-cr");

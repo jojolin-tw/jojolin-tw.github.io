@@ -194,6 +194,16 @@ kbd{
 @media (min-width: 3200px) { header, #introbar, #vpane, aside, footer { zoom: 1.75; } #hud { zoom: 2.15; } }
 
 
+/* 緩衝指示 (全站影片同一語言): 影片因網路載入停住才浮出 */
+.vbuf { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; pointer-events: none; background: rgba(10,15,28,.35); z-index: 3; }
+.vbuf.on { display: flex; }
+.vbuf .ring { width: 30px; height: 30px; border-radius: 50%; border: 3px solid rgba(226,232,240,.25);
+  border-top-color: #38bdf8; animation: vspin .9s linear infinite; }
+.vbuf span { font-size: 11px; color: #e6edf3; text-shadow: 0 1px 4px #000; }
+@keyframes vspin { to { transform: rotate(360deg); } }
+body.thumbmode .vbuf { display: none !important; }
+
 /* 左欄頂端摘要＋關鍵字 (與其他分頁 hero 同語言: 藍＝技術、綠＝成果) */
 .ssp-sub { margin: 0 0 8px; font-size: 12px; line-height: 1.7; color: #9aa7b5; }
 .ssp-sub b { color: #e6edf3; }
@@ -1276,6 +1286,17 @@ const H0 = window.__initHash || '';
 if (!/^#\d+$/.test(H0)) go(t2idx(VWINS[0].t0));
 else syncVideosFromReplay();
 
+/* ---------- 影片緩衝指示: 每張影片卡掛一個轉圈, waiting/stalled 持續 250ms 才顯示 ---------- */
+document.querySelectorAll('.vcard video').forEach(v => {
+  const buf = document.createElement('div'); buf.className = 'vbuf';
+  buf.innerHTML = '<div class="ring"></div><span>影片緩衝中…（等待網路載入）</span>';
+  v.parentElement.appendChild(buf);
+  let tmr = null;
+  const show = () => { if (tmr) return; tmr = setTimeout(() => { tmr = null; if (!v.paused && v.readyState < 3) buf.classList.add('on'); }, 250); };
+  const hide = () => { if (tmr) { clearTimeout(tmr); tmr = null; } buf.classList.remove('on'); };
+  ['waiting', 'stalled'].forEach(e => v.addEventListener(e, show));
+  ['playing', 'canplay', 'pause', 'emptied', 'error', 'ended'].forEach(e => v.addEventListener(e, hide));
+});
 /* ---------- 判定 HUD (桌機/手機皆有): 鏡射右欄即時欄位 ---------- */
 (function () {
   const hud = document.createElement('div');
