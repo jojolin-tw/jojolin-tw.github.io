@@ -144,9 +144,9 @@
       </div>
       <div class="body">
         <h2>持續壓線偵測<span class="go">→</span></h2>
-        <div class="big"><span class="bv">偵測長時間騎在車道線上的行駛行為</span><span class="bk">原創 min-AR 曲線法：從虛線框的形狀直接量出壓線秒數</span></div>
-        <p class="hook">彎道、壓線方向、GPS 可信度三重守門；289 段測資逐段人工標記：觸發 7/7 全真、彎道誤判 2/2 攔截。</p>
-        <div class="tags"><span class="tag">min-AR 曲線法</span><span class="tag">零相位雙向 EMA</span><span class="tag">彎道誤判守門</span><span class="tag">GPS 可信度指紋</span></div>
+        <div class="big"><span class="bv">偵測長時間騎在車道線上的行駛行為</span><span class="bk">原創 min-AR 曲線法：從虛線框的形狀即時量出壓線秒數，滿 5 秒當下語音提醒</span></div>
+        <p class="hook">車機逐幀只看過去：壓線秒數先記為待確認，每次 GPS 座標更新檢核非急彎、訊號可信才承認；323 支人工標記影片：Precision 100%、Recall 95.2%。</p>
+        <div class="tags"><span class="tag">min-AR 曲線法</span><span class="tag">因果中值＋EMA 濾波</span><span class="tag">角速度／曲率半徑急彎判別</span><span class="tag">GPS 可信度檢核</span></div>
       </div>
     </a>
   </div>
