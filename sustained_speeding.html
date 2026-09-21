@@ -2,6 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>分頁 04｜持續超速偵測・以道路圖資逐點比對速限</title>
 <script>window.__initHash = location.hash;</script>
@@ -683,7 +684,7 @@ const derive = P.map(p => {
 /* ---------- 地圖 ---------- */
 const map = L.map('map', { zoomControl: true });
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-  { maxZoom: 19, className: 'darkbase',
+  { maxZoom: 19, className: 'darkbase', referrerPolicy: 'strict-origin-when-cross-origin',
     attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
 L.control.scale({ metric: true, imperial: false, position: 'bottomright' }).addTo(map);
 
