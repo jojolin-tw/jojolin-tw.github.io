@@ -699,7 +699,7 @@ const baseLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
   };
   if (location.search.includes('noosm')) { showPlain(); return; }
   try {
-    fetch('https://tile.openstreetmap.org/' + z + '/' + tx + '/' + ty + '.png', { mode: 'cors', cache: 'no-store' })
+    fetch('https://tile.openstreetmap.org/' + z + '/' + tx + '/' + ty + '.png', { mode: 'cors' })
       .then(r => {
         const cc = (r.headers.get('cache-control') || '').toLowerCase();
         if (r.status === 403 || (r.ok && /no-cache/.test(cc) && !/max-age/.test(cc))) showPlain(); else baseLayer.addTo(map);
